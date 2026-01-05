@@ -1,0 +1,168 @@
+{
+  "comment": "이것은 보험금 청구 샘플 요청입니다. 실제 환경에서는 diagnosis_base64와 receipt_base64에 실제 이미지의 Base64 인코딩 문자열이 들어갑니다.",
+
+  "sample_1_auto_approve": {
+    "description": "자동 승인되는 케이스 (높은 신뢰도)",
+    "request": {
+      "claim_case_id": "CLM-2024-TEST-001",
+      "policy_id": "POL-2024-001",
+      "customer_name": "홍길동",
+      "customer_birth": "1990-01-15",
+      "customer_phone": "010-1234-5678",
+      "customer_email": "hong@email.com",
+      "diagnosis_base64": "MOCK_DIAGNOSIS_IMAGE_BASE64_STRING_HERE",
+      "diagnosis_mime": "image/jpeg",
+      "receipt_base64": "MOCK_RECEIPT_IMAGE_BASE64_STRING_HERE",
+      "receipt_mime": "image/jpeg",
+      "callback_url": "https://example.com/webhook/claim-result"
+    },
+    "expected_ocr_result": {
+      "patient_name": "홍길동",
+      "diagnosis_date": "2024-12-10",
+      "diagnosis_code": "K35.0",
+      "diagnosis_name": "급성충수염",
+      "hospital_name": "서울대학교병원",
+      "doctor_name": "김의사",
+      "treatment_type": "입원",
+      "admission_date": "2024-12-10",
+      "discharge_date": "2024-12-15",
+      "hospital_days": 5,
+      "surgery_name": "충수절제술",
+      "surgery_date": "2024-12-11",
+      "receipt_date": "2024-12-15",
+      "total_amount": 1500000,
+      "patient_paid": 150000,
+      "insurance_paid": 1350000,
+      "items": [
+        {
+          "name": "입원료",
+          "quantity": 5,
+          "unit_price": 100000,
+          "amount": 500000
+        },
+        {
+          "name": "수술비",
+          "quantity": 1,
+          "unit_price": 800000,
+          "amount": 800000
+        },
+        {
+          "name": "약제비",
+          "quantity": 1,
+          "unit_price": 200000,
+          "amount": 200000
+        }
+      ]
+    }
+  },
+
+  "sample_2_needs_verification": {
+    "description": "검증이 필요한 케이스 (낮은 신뢰도)",
+    "request": {
+      "claim_case_id": "CLM-2024-TEST-002",
+      "policy_id": "POL-2024-001",
+      "customer_name": "김영희",
+      "customer_birth": "1985-03-20",
+      "customer_phone": "010-9876-5432",
+      "diagnosis_base64": "MOCK_DIAGNOSIS_IMAGE_BASE64_STRING_HERE_LOW_QUALITY",
+      "receipt_base64": "MOCK_RECEIPT_IMAGE_BASE64_STRING_HERE_LOW_QUALITY"
+    },
+    "expected_ocr_result": {
+      "patient_name": "김영희",
+      "diagnosis_date": "2024-12-01",
+      "diagnosis_code": "M25.5",
+      "diagnosis_name": "관절통",
+      "hospital_name": "강남성모병원",
+      "treatment_type": "외래",
+      "receipt_date": "2024-12-01",
+      "total_amount": 50000,
+      "patient_paid": 15000,
+      "insurance_paid": 35000
+    },
+    "note": "이 케이스는 OCR 신뢰도가 낮아 수동 검증이 필요합니다."
+  },
+
+  "sample_3_cancer_claim": {
+    "description": "암 진단 청구 케이스",
+    "request": {
+      "claim_case_id": "CLM-2024-TEST-003",
+      "policy_id": "POL-2024-002",
+      "customer_name": "이철수",
+      "customer_birth": "1978-07-10",
+      "diagnosis_base64": "MOCK_CANCER_DIAGNOSIS_BASE64",
+      "receipt_base64": "MOCK_CANCER_RECEIPT_BASE64"
+    },
+    "expected_ocr_result": {
+      "patient_name": "이철수",
+      "diagnosis_date": "2024-11-20",
+      "diagnosis_code": "C18.9",
+      "diagnosis_name": "결장의 악성신생물",
+      "hospital_name": "삼성서울병원",
+      "doctor_name": "박종양",
+      "treatment_type": "입원",
+      "admission_date": "2024-11-20",
+      "discharge_date": "2024-11-27",
+      "hospital_days": 7,
+      "surgery_name": "결장절제술",
+      "surgery_date": "2024-11-22",
+      "receipt_date": "2024-11-27",
+      "total_amount": 5000000,
+      "patient_paid": 500000,
+      "insurance_paid": 4500000
+    },
+    "expected_coverage": [
+      {
+        "coverage_name": "일반암진단비",
+        "coverage_code": "COV-005",
+        "benefit_amount": 30000000,
+        "applicable": true
+      },
+      {
+        "coverage_name": "암입원비",
+        "coverage_code": "COV-006",
+        "benefit_amount": 700000,
+        "calculation": "7일 × 100,000원"
+      }
+    ]
+  },
+
+  "verification_request_sample": {
+    "description": "검증자가 OCR 결과를 확인하고 제출하는 요청",
+    "request": {
+      "claim_case_id": "CLM-2024-TEST-002",
+      "verified_by": "reviewer001",
+      "action": "modify",
+      "modified_ocr": {
+        "patient_name": "김영희",
+        "diagnosis_code": "M25.56"
+      },
+      "model_feedback": {
+        "gpt": true,
+        "claude": true,
+        "gemini": false
+      },
+      "notes": "Gemini가 진단코드를 잘못 인식했습니다. M25.5 → M25.56으로 수정"
+    }
+  },
+
+  "feedback_request_sample": {
+    "description": "모델 피드백 제출 샘플",
+    "request": {
+      "claim_case_id": "CLM-2024-TEST-001",
+      "model_name": "gpt",
+      "task_type": "ocr",
+      "is_correct": true,
+      "confidence_score": 0.95,
+      "response_time_ms": 2800,
+      "feedback_by": "reviewer001",
+      "notes": "정확하게 인식함"
+    }
+  },
+
+  "base64_note": "실제 환경에서 Base64 생성 방법",
+  "base64_generation_example": {
+    "nodejs": "const fs = require('fs'); const base64 = fs.readFileSync('image.jpg', 'base64');",
+    "python": "import base64; with open('image.jpg', 'rb') as f: base64_str = base64.b64encode(f.read()).decode()",
+    "online_tool": "https://www.base64-image.de/ 에서 이미지를 업로드하여 Base64로 변환 가능"
+  }
+}

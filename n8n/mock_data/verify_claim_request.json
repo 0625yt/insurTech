@@ -1,0 +1,17 @@
+{
+  "_description": "OCR 결과 검증 요청 (검증자가 수동 검증할 때)",
+
+  "claim_case_id": "CLM-TEST-001",
+  "verified_by": "reviewer001",
+  "action": "approve",
+
+  "modified_ocr": null,
+
+  "model_feedback": {
+    "gpt": true,
+    "claude": true,
+    "gemini": true
+  },
+
+  "notes": "OCR 결과 정확함, 모든 모델이 동일한 결과 출력"
+}

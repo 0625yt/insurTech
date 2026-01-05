@@ -1,0 +1,179 @@
+{
+  "name": "보험금 청구 자동 심사 시스템 v3",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "insurance-claim/submit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1a2b3c4d-1111-1111-1111-111111111111",
+      "name": "1. 청구서 제출 수신",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "claim-submit"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 입력 데이터 전처리\nconst input = $input.first().json.body || $input.first().json;\n\nconst claimCaseId = input.claim_case_id || `CLM-${Date.now()}`;\n\n// Mock OCR 결과 생성 (AI API 없이 테스트)\nconst mockOcrResult = {\n  patient_name: input.customer_name || '홍길동',\n  diagnosis_date: '2024-12-10',\n  diagnosis_code: 'K35.0',\n  diagnosis_name: '급성충수염',\n  hospital_name: '서울대학교병원',\n  treatment_type: '입원',\n  hospital_days: 4,\n  surgery_name: '복강경 충수절제술',\n  total_amount: 1500000,\n  patient_paid: 150000\n};\n\nreturn [{\n  json: {\n    claim_case_id: claimCaseId,\n    policy_id: input.policy_id || 'POL-2024-001',\n    customer_name: input.customer_name || '홍길동',\n    ocr_result: mockOcrResult,\n    confidence_score: 0.95,\n    submitted_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "1a2b3c4d-2222-2222-2222-222222222222",
+      "name": "2. 데이터 전처리 및 Mock OCR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT policy_id, policy_type, coverage_start_date, coverage_end_date, policyholder_name, premium_status, policy_terms_text FROM insurance_policies WHERE policy_id = '{{ $json.policy_id }}' LIMIT 1"
+      },
+      "id": "1a2b3c4d-3333-3333-3333-333333333333",
+      "name": "3. 보험증권 조회",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 계약 유효성 검증 및 담보 분석\nconst prevData = $('2. 데이터 전처리 및 Mock OCR').first().json;\nconst policy = $input.first().json;\n\nconst isValid = policy && policy.policy_id;\nconst errors = [];\n\nif (!isValid) {\n  errors.push('보험 계약을 찾을 수 없습니다.');\n}\n\n// Mock 담보 분석\nconst coverages = [\n  {\n    coverage_name: '질병입원의료비',\n    coverage_type: '실손',\n    benefit_rate: '90%',\n    applicable: true\n  },\n  {\n    coverage_name: '수술비',\n    coverage_type: '정액',\n    benefit_amount: 1000000,\n    applicable: true\n  }\n];\n\n// Mock 심사 결과\nconst totalAmount = prevData.ocr_result?.total_amount || 1500000;\nconst approvedAmount = Math.round(totalAmount * 0.9) + 1000000;\n\nreturn [{\n  json: {\n    claim_case_id: prevData.claim_case_id,\n    policy_id: prevData.policy_id,\n    customer_name: prevData.customer_name,\n    ocr_result: prevData.ocr_result,\n    policy_info: policy,\n    policy_valid: errors.length === 0,\n    policy_errors: errors,\n    coverages: coverages,\n    review_result: {\n      status: errors.length === 0 ? 'approved' : 'rejected',\n      decision: '질병입원의료비 90% + 수술비 정액 지급 승인',\n      total_claimed: totalAmount,\n      total_approved: errors.length === 0 ? approvedAmount : 0,\n      total_rejected: errors.length === 0 ? Math.round(totalAmount * 0.1) : totalAmount,\n      confidence_score: 0.95\n    },\n    processed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "1a2b3c4d-4444-4444-4444-444444444444",
+      "name": "4. 계약 검증 및 심사",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.policy_valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "1a2b3c4d-5555-5555-5555-555555555555",
+      "name": "5. 계약 유효?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO claim_review_results (claim_case_id, policy_id, customer_name, diagnosis_name, diagnosis_code, treatment_type, total_claimed_amount, review_status, approved_amount, rejected_amount, confidence_score, ocr_model_used, review_details) VALUES ('{{ $json.claim_case_id }}', '{{ $json.policy_id }}', '{{ $json.customer_name }}', '{{ $json.ocr_result.diagnosis_name }}', '{{ $json.ocr_result.diagnosis_code }}', '{{ $json.ocr_result.treatment_type }}', {{ $json.review_result.total_claimed }}, '{{ $json.review_result.status }}', {{ $json.review_result.total_approved }}, {{ $json.review_result.total_rejected }}, {{ $json.review_result.confidence_score }}, 'mock', '{{ JSON.stringify($json.review_result) }}')"
+      },
+      "id": "1a2b3c4d-6666-6666-6666-666666666666",
+      "name": "6. 심사 결과 저장",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"claim_case_id\": \"{{ $json.claim_case_id }}\",\n  \"status\": \"{{ $json.review_result.status }}\",\n  \"total_claimed\": {{ $json.review_result.total_claimed }},\n  \"total_approved\": {{ $json.review_result.total_approved }},\n  \"total_rejected\": {{ $json.review_result.total_rejected }},\n  \"decision\": \"{{ $json.review_result.decision }}\",\n  \"confidence_score\": {{ $json.review_result.confidence_score }},\n  \"processed_at\": \"{{ $json.processed_at }}\"\n}",
+        "options": {}
+      },
+      "id": "1a2b3c4d-7777-7777-7777-777777777777",
+      "name": "7. 성공 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"claim_case_id\": \"{{ $json.claim_case_id }}\",\n  \"status\": \"rejected\",\n  \"message\": \"계약 유효성 검증 실패\",\n  \"errors\": {{ JSON.stringify($json.policy_errors) }}\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "1a2b3c4d-8888-8888-8888-888888888888",
+      "name": "8. 실패 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1350, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "insurance-claim/stats",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1a2b3c4d-9999-9999-9999-999999999999",
+      "name": "S1. 통계 조회",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 550],
+      "webhookId": "claim-stats"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT model_name, task_type, COUNT(*) AS total_evaluations, SUM(CASE WHEN is_correct = true THEN 1 ELSE 0 END) AS correct_count, ROUND(AVG(CASE WHEN is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) AS accuracy_pct FROM ai_model_feedback GROUP BY model_name, task_type ORDER BY accuracy_pct DESC"
+      },
+      "id": "1a2b3c4d-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "name": "S2. 통계 쿼리",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [470, 550]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"statistics\": {{ JSON.stringify($json) }},\n  \"generated_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "1a2b3c4d-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "name": "S3. 통계 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 550]
+    }
+  ],
+  "connections": {
+    "1. 청구서 제출 수신": {
+      "main": [[{ "node": "2. 데이터 전처리 및 Mock OCR", "type": "main", "index": 0 }]]
+    },
+    "2. 데이터 전처리 및 Mock OCR": {
+      "main": [[{ "node": "3. 보험증권 조회", "type": "main", "index": 0 }]]
+    },
+    "3. 보험증권 조회": {
+      "main": [[{ "node": "4. 계약 검증 및 심사", "type": "main", "index": 0 }]]
+    },
+    "4. 계약 검증 및 심사": {
+      "main": [[{ "node": "5. 계약 유효?", "type": "main", "index": 0 }]]
+    },
+    "5. 계약 유효?": {
+      "main": [
+        [{ "node": "6. 심사 결과 저장", "type": "main", "index": 0 }],
+        [{ "node": "8. 실패 응답", "type": "main", "index": 0 }]
+      ]
+    },
+    "6. 심사 결과 저장": {
+      "main": [[{ "node": "7. 성공 응답", "type": "main", "index": 0 }]]
+    },
+    "S1. 통계 조회": {
+      "main": [[{ "node": "S2. 통계 쿼리", "type": "main", "index": 0 }]]
+    },
+    "S2. 통계 쿼리": {
+      "main": [[{ "node": "S3. 통계 응답", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "v3-cloud",
+  "meta": {
+    "instanceId": "cloud-compatible"
+  },
+  "id": "insurance-claim-cloud"
+}

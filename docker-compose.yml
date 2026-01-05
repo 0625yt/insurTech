@@ -1,0 +1,151 @@
+services:
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:16-alpine
+    container_name: insurtech-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: insurtech
+      POSTGRES_USER: insurtech_user
+      POSTGRES_PASSWORD: insurtech_password_2024
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/mock_data.sql:/docker-entrypoint-initdb.d/02-mock_data.sql
+    networks:
+      - insurtech-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insurtech_user -d insurtech"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (캐싱, 세션 관리)
+  redis:
+    image: redis:7-alpine
+    container_name: insurtech-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - insurtech-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # n8n 워크플로우 엔진
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: insurtech-n8n
+    restart: unless-stopped
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=insurtech
+      - DB_POSTGRESDB_USER=insurtech_user
+      - DB_POSTGRESDB_PASSWORD=insurtech_password_2024
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Seoul
+      # AI API URLs (환경변수로 설정 - 실제 사용 시 .env 파일로 분리 권장)
+      - GPT_OCR_API_URL=https://api.openai.com/v1/chat/completions
+      - GPT_API_URL=https://api.openai.com/v1/chat/completions
+      - CLAUDE_OCR_API_URL=https://api.anthropic.com/v1/messages
+      - CLAUDE_API_URL=https://api.anthropic.com/v1/messages
+      - GEMINI_OCR_API_URL=https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent
+      - GEMINI_API_URL=https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+    networks:
+      - insurtech-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Backend API 서버 (Node.js + Express + TypeScript)
+  api-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: insurtech-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: insurtech
+      DB_USER: insurtech_user
+      DB_PASSWORD: insurtech_password_2024
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # n8n Webhook
+      N8N_WEBHOOK_BASE_URL: http://n8n:5678/webhook
+      # JWT Secret (실제 환경에서는 강력한 시크릿 사용)
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - insurtech-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      n8n:
+        condition: service_started
+
+  # PgAdmin (데이터베이스 관리 도구 - 선택사항)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: insurtech-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@insurtech.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - insurtech-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  n8n_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  insurtech-network:
+    driver: bridge

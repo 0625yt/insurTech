@@ -1,0 +1,36 @@
+{
+  "_description": "AI 모델 피드백 제출 요청",
+
+  "feedback_gpt_correct": {
+    "claim_case_id": "CLM-TEST-001",
+    "model_name": "gpt",
+    "task_type": "ocr",
+    "is_correct": true,
+    "confidence_score": 0.92,
+    "response_time_ms": 2800,
+    "feedback_by": "reviewer001",
+    "notes": "정확하게 인식함"
+  },
+
+  "feedback_claude_correct": {
+    "claim_case_id": "CLM-TEST-001",
+    "model_name": "claude",
+    "task_type": "ocr",
+    "is_correct": true,
+    "confidence_score": 0.95,
+    "response_time_ms": 2100,
+    "feedback_by": "reviewer001",
+    "notes": "가장 정확한 결과"
+  },
+
+  "feedback_gemini_incorrect": {
+    "claim_case_id": "CLM-TEST-001",
+    "model_name": "gemini",
+    "task_type": "ocr",
+    "is_correct": false,
+    "confidence_score": 0.88,
+    "response_time_ms": 1900,
+    "feedback_by": "reviewer001",
+    "notes": "금액 인식 오류 (150만원 → 15만원)"
+  }
+}

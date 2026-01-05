@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsurTech - 로그인</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            width: 900px;
+            max-width: 95%;
+            display: flex;
+        }
+
+        .login-left {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            color: white;
+        }
+
+        .login-left h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        .login-left p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.95rem;
+        }
+
+        .feature-list li::before {
+            content: '✓';
+            width: 24px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .login-right {
+            flex: 1;
+            padding: 60px 50px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .login-header h2 {
+            color: #333;
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group input.error {
+            border-color: #e74c3c;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            font-size: 0.85rem;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .remember-me input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .forgot-password {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .forgot-password:hover {
+            text-decoration: underline;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .login-btn.loading {
+            position: relative;
+            color: transparent;
+        }
+
+        .login-btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            top: 50%;
+            left: 50%;
+            margin: -12px 0 0 -12px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        .alert-success {
+            background: #dcfce7;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+        }
+
+        .version-info {
+            text-align: center;
+            margin-top: 30px;
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        .test-accounts {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .test-accounts h4 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+
+        .test-account-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .test-account-item:last-child {
+            border-bottom: none;
+        }
+
+        .test-account-item .role {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .test-account-item .credentials {
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .login-container {
+                flex-direction: column;
+            }
+
+            .login-left {
+                padding: 40px 30px;
+            }
+
+            .login-right {
+                padding: 40px 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-left">
+            <h1>InsurTech</h1>
+            <p>보험금 청구 자동 심사 시스템<br>Enterprise Edition v4.0</p>
+
+            <ul class="feature-list">
+                <li>AI 기반 자동 심사</li>
+                <li>다단계 결재 워크플로우</li>
+                <li>실시간 사기 탐지</li>
+                <li>서류 검증 자동화</li>
+                <li>중복보험 비례분담 계산</li>
+                <li>금감원 규정 준수 감사 로그</li>
+            </ul>
+        </div>
+
+        <div class="login-right">
+            <div class="login-header">
+                <h2>로그인</h2>
+                <p>계정 정보를 입력하세요</p>
+            </div>
+
+            <div id="alertBox" class="alert">
+                <span id="alertMessage"></span>
+            </div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="userCode">사용자 코드</label>
+                    <input type="text" id="userCode" name="userCode" placeholder="사원번호 입력" required>
+                    <div class="error-message" id="userCodeError">사용자 코드를 입력해주세요.</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">비밀번호</label>
+                    <input type="password" id="password" name="password" placeholder="비밀번호 입력" required>
+                    <div class="error-message" id="passwordError">비밀번호를 입력해주세요.</div>
+                </div>
+
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox" id="rememberMe">
+                        <span>로그인 상태 유지</span>
+                    </label>
+                    <a href="#" class="forgot-password">비밀번호 찾기</a>
+                </div>
+
+                <button type="submit" class="login-btn" id="loginBtn">로그인</button>
+            </form>
+
+            <div class="test-accounts">
+                <h4>테스트 계정 (개발용)</h4>
+                <div class="test-account-item">
+                    <span class="role">관리자</span>
+                    <span class="credentials">admin / Admin123!</span>
+                </div>
+                <div class="test-account-item">
+                    <span class="role">팀장</span>
+                    <span class="credentials">teamlead1 / Team123!</span>
+                </div>
+                <div class="test-account-item">
+                    <span class="role">심사자</span>
+                    <span class="credentials">reviewer1 / User123!</span>
+                </div>
+            </div>
+
+            <div class="version-info">
+                InsurTech Enterprise v4.0.0 | © 2024 InsurTech Corp.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api';
+
+        // DOM Elements
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const alertBox = document.getElementById('alertBox');
+        const alertMessage = document.getElementById('alertMessage');
+        const userCodeInput = document.getElementById('userCode');
+        const passwordInput = document.getElementById('password');
+        const rememberMe = document.getElementById('rememberMe');
+
+        // 저장된 사용자 코드 로드
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedUserCode = localStorage.getItem('savedUserCode');
+            if (savedUserCode) {
+                userCodeInput.value = savedUserCode;
+                rememberMe.checked = true;
+            }
+
+            // 이미 로그인되어 있으면 대시보드로 이동
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                verifyToken(token);
+            }
+        });
+
+        // 토큰 검증
+        async function verifyToken(token) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    window.location.href = 'dashboard-enterprise.html';
+                } else {
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('userData');
+                }
+            } catch (error) {
+                console.error('Token verification error:', error);
+            }
+        }
+
+        // Alert 표시
+        function showAlert(message, type = 'error') {
+            alertBox.className = `alert alert-${type} show`;
+            alertMessage.textContent = message;
+        }
+
+        // Alert 숨기기
+        function hideAlert() {
+            alertBox.className = 'alert';
+        }
+
+        // 폼 유효성 검사
+        function validateForm() {
+            let isValid = true;
+            hideAlert();
+
+            if (!userCodeInput.value.trim()) {
+                document.getElementById('userCodeError').classList.add('show');
+                userCodeInput.classList.add('error');
+                isValid = false;
+            } else {
+                document.getElementById('userCodeError').classList.remove('show');
+                userCodeInput.classList.remove('error');
+            }
+
+            if (!passwordInput.value) {
+                document.getElementById('passwordError').classList.add('show');
+                passwordInput.classList.add('error');
+                isValid = false;
+            } else {
+                document.getElementById('passwordError').classList.remove('show');
+                passwordInput.classList.remove('error');
+            }
+
+            return isValid;
+        }
+
+        // 로그인 처리
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!validateForm()) {
+                return;
+            }
+
+            const userCode = userCodeInput.value.trim();
+            const password = passwordInput.value;
+
+            // 로딩 상태
+            loginBtn.classList.add('loading');
+            loginBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userCode, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // 로그인 성공
+                    localStorage.setItem('authToken', data.data.token);
+                    localStorage.setItem('userData', JSON.stringify(data.data.user));
+
+                    // 사용자 코드 저장
+                    if (rememberMe.checked) {
+                        localStorage.setItem('savedUserCode', userCode);
+                    } else {
+                        localStorage.removeItem('savedUserCode');
+                    }
+
+                    showAlert('로그인 성공! 대시보드로 이동합니다.', 'success');
+
+                    setTimeout(() => {
+                        window.location.href = 'dashboard-enterprise.html';
+                    }, 1000);
+                } else {
+                    showAlert(data.error || '로그인에 실패했습니다.');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showAlert('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
+            } finally {
+                loginBtn.classList.remove('loading');
+                loginBtn.disabled = false;
+            }
+        });
+
+        // 입력 시 에러 상태 해제
+        userCodeInput.addEventListener('input', () => {
+            document.getElementById('userCodeError').classList.remove('show');
+            userCodeInput.classList.remove('error');
+        });
+
+        passwordInput.addEventListener('input', () => {
+            document.getElementById('passwordError').classList.remove('show');
+            passwordInput.classList.remove('error');
+        });
+    </script>
+</body>
+</html>

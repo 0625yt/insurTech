@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>보험금 청구 자동 심사 시스템 - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.2em;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #888;
+            font-size: 1.1em;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+        }
+
+        .panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .panel h2 {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel h2 .icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 1em;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,212,255,0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .workflow-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .workflow-stage {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #333;
+            transition: all 0.5s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .workflow-stage.waiting {
+            border-left-color: #666;
+        }
+
+        .workflow-stage.processing {
+            border-left-color: #ffa500;
+            background: rgba(255,165,0,0.1);
+        }
+
+        .workflow-stage.completed {
+            border-left-color: #00ff88;
+            background: rgba(0,255,136,0.05);
+        }
+
+        .workflow-stage.error {
+            border-left-color: #ff4444;
+            background: rgba(255,68,68,0.1);
+        }
+
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .stage-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stage-number {
+            width: 28px;
+            height: 28px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+        }
+
+        .stage-status {
+            font-size: 0.85em;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .workflow-stage.processing .stage-status {
+            background: rgba(255,165,0,0.3);
+            color: #ffa500;
+        }
+
+        .workflow-stage.completed .stage-status {
+            background: rgba(0,255,136,0.2);
+            color: #00ff88;
+        }
+
+        .stage-data {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85em;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .workflow-stage.completed .stage-data,
+        .workflow-stage.processing .stage-data {
+            display: block;
+        }
+
+        .stage-data pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,165,0,0.3);
+            border-top-color: #ffa500;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .result-panel {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-panel.show {
+            display: block;
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,212,255,0.1));
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid rgba(0,255,136,0.3);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .result-status {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #00ff88;
+        }
+
+        .result-status.rejected {
+            color: #ff4444;
+        }
+
+        .result-amount {
+            font-size: 2em;
+            font-weight: 700;
+            color: #00d4ff;
+        }
+
+        .result-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .detail-item {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .detail-item .label {
+            color: #888;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .detail-item .value {
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .payout-breakdown {
+            margin-top: 20px;
+        }
+
+        .payout-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .payout-item:last-child {
+            border-bottom: none;
+        }
+
+        .payout-item .name {
+            color: #aaa;
+        }
+
+        .payout-item .amount {
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .payout-item .calc {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 3px;
+        }
+
+        .ai-models {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .ai-model-badge {
+            padding: 5px 12px;
+            background: rgba(123,44,191,0.3);
+            border-radius: 20px;
+            font-size: 0.8em;
+            border: 1px solid rgba(123,44,191,0.5);
+        }
+
+        .confidence-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        .metadata {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .preset-btn {
+            flex: 1;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s;
+        }
+
+        .preset-btn:hover {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+
+        .preset-btn.active {
+            background: rgba(0,212,255,0.2);
+            border-color: #00d4ff;
+            color: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>보험금 청구 자동 심사 시스템</h1>
+            <p>AI 기반 Multi-Model OCR 앙상블 & 자동 심사 데모</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- 입력 패널 -->
+            <div class="panel">
+                <h2>
+                    <span class="icon">📋</span>
+                    청구 정보 입력
+                </h2>
+
+                <div class="preset-buttons">
+                    <button class="preset-btn active" onclick="loadPreset('standard')">일반 케이스</button>
+                    <button class="preset-btn" onclick="loadPreset('surgery')">수술 케이스</button>
+                    <button class="preset-btn" onclick="loadPreset('reject')">거절 케이스</button>
+                </div>
+
+                <div class="form-group">
+                    <label>증권 번호</label>
+                    <input type="text" id="policy_id" value="POL-2024-001">
+                </div>
+
+                <div class="form-group">
+                    <label>고객명</label>
+                    <input type="text" id="customer_name" value="홍길동">
+                </div>
+
+                <div class="form-group">
+                    <label>청구 케이스 ID</label>
+                    <input type="text" id="claim_case_id" value="CLM-DEMO-001">
+                </div>
+
+                <div class="form-group">
+                    <label>청구 유형</label>
+                    <select id="claim_type">
+                        <option value="hospitalization">입원</option>
+                        <option value="outpatient">통원</option>
+                        <option value="surgery">수술</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>청구 금액 (원)</label>
+                    <input type="number" id="claim_amount" value="1520000">
+                </div>
+
+                <button class="btn btn-primary" id="submitBtn" onclick="submitClaim()">
+                    🚀 청구 심사 요청
+                </button>
+            </div>
+
+            <!-- 워크플로우 패널 -->
+            <div class="panel">
+                <h2>
+                    <span class="icon">⚡</span>
+                    n8n 워크플로우 처리 현황
+                </h2>
+
+                <div class="workflow-container" id="workflowContainer">
+                    <div class="workflow-stage waiting" id="stage1">
+                        <div class="stage-header">
+                            <div class="stage-title">
+                                <span class="stage-number">1</span>
+                                청구 접수 (Webhook)
+                            </div>
+                            <span class="stage-status">대기</span>
+                        </div>
+                        <div class="stage-data"><pre id="stage1-data"></pre></div>
+                    </div>
+
+                    <div class="workflow-stage waiting" id="stage2">
+                        <div class="stage-header">
+                            <div class="stage-title">
+                                <span class="stage-number">2</span>
+                                고객/증권 정보 조회
+                            </div>
+                            <span class="stage-status">대기</span>
+                        </div>
+                        <div class="stage-data"><pre id="stage2-data"></pre></div>
+                    </div>
+
+                    <div class="workflow-stage waiting" id="stage3">
+                        <div class="stage-header">
+                            <div class="stage-title">
+                                <span class="stage-number">3</span>
+                                AI OCR 앙상블 처리
+                            </div>
+                            <span class="stage-status">대기</span>
+                        </div>
+                        <div class="stage-data"><pre id="stage3-data"></pre></div>
+                    </div>
+
+                    <div class="workflow-stage waiting" id="stage4">
+                        <div class="stage-header">
+                            <div class="stage-title">
+                                <span class="stage-number">4</span>
+                                중복 청구 검사
+                            </div>
+                            <span class="stage-status">대기</span>
+                        </div>
+                        <div class="stage-data"><pre id="stage4-data"></pre></div>
+                    </div>
+
+                    <div class="workflow-stage waiting" id="stage5">
+                        <div class="stage-header">
+                            <div class="stage-title">
+                                <span class="stage-number">5</span>
+                                보장 분석 & 지급액 산정
+                            </div>
+                            <span class="stage-status">대기</span>
+                        </div>
+                        <div class="stage-data"><pre id="stage5-data"></pre></div>
+                    </div>
+
+                    <div class="workflow-stage waiting" id="stage6">
+                        <div class="stage-header">
+                            <div class="stage-title">
+                                <span class="stage-number">6</span>
+                                자동 심사 결정
+                            </div>
+                            <span class="stage-status">대기</span>
+                        </div>
+                        <div class="stage-data"><pre id="stage6-data"></pre></div>
+                    </div>
+                </div>
+
+                <!-- 결과 패널 -->
+                <div class="result-panel" id="resultPanel">
+                    <div class="result-card">
+                        <div class="result-header">
+                            <div>
+                                <div class="result-status" id="resultStatus">승인</div>
+                                <div id="resultDecision" style="color: #aaa; margin-top: 5px;"></div>
+                            </div>
+                            <div class="result-amount" id="resultAmount">₩0</div>
+                        </div>
+
+                        <div style="margin-top: 20px;">
+                            <div style="color: #888; margin-bottom: 10px;">OCR 신뢰도</div>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.85em;">
+                                <span id="confidenceText">0%</span>
+                                <span id="ocrMethod">앙상블</span>
+                            </div>
+                            <div class="ai-models" id="aiModels"></div>
+                        </div>
+
+                        <div class="result-details">
+                            <div class="detail-item">
+                                <div class="label">진단명</div>
+                                <div class="value" id="diagnosisName">-</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="label">진단코드</div>
+                                <div class="value" id="diagnosisCode">-</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="label">치료 유형</div>
+                                <div class="value" id="treatmentType">-</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="label">입원일수</div>
+                                <div class="value" id="hospitalDays">-</div>
+                            </div>
+                        </div>
+
+                        <div class="payout-breakdown" id="payoutBreakdown">
+                            <h3 style="margin-bottom: 15px; font-size: 1em;">지급 내역</h3>
+                        </div>
+
+                        <div class="metadata">
+                            <span id="processTime">처리시간: -</span>
+                            <span id="autoApproveReason">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/insurance-claim/submit';
+
+        const presets = {
+            standard: {
+                policy_id: 'POL-2024-001',
+                customer_name: '홍길동',
+                claim_case_id: 'CLM-DEMO-001',
+                claim_type: 'hospitalization',
+                claim_amount: 1520000
+            },
+            surgery: {
+                policy_id: 'POL-2024-002',
+                customer_name: '김철수',
+                claim_case_id: 'CLM-DEMO-002',
+                claim_type: 'surgery',
+                claim_amount: 3500000
+            },
+            reject: {
+                policy_id: 'POL-EXPIRED',
+                customer_name: '이영희',
+                claim_case_id: 'CLM-DEMO-003',
+                claim_type: 'outpatient',
+                claim_amount: 50000
+            }
+        };
+
+        function loadPreset(type) {
+            const preset = presets[type];
+            document.getElementById('policy_id').value = preset.policy_id;
+            document.getElementById('customer_name').value = preset.customer_name;
+            document.getElementById('claim_case_id').value = preset.claim_case_id;
+            document.getElementById('claim_type').value = preset.claim_type;
+            document.getElementById('claim_amount').value = preset.claim_amount;
+
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function resetWorkflow() {
+            for (let i = 1; i <= 6; i++) {
+                const stage = document.getElementById(`stage${i}`);
+                stage.className = 'workflow-stage waiting';
+                stage.querySelector('.stage-status').textContent = '대기';
+                document.getElementById(`stage${i}-data`).textContent = '';
+            }
+            document.getElementById('resultPanel').classList.remove('show');
+        }
+
+        function updateStage(stageNum, status, data) {
+            const stage = document.getElementById(`stage${stageNum}`);
+            stage.className = `workflow-stage ${status}`;
+
+            const statusEl = stage.querySelector('.stage-status');
+            if (status === 'processing') {
+                statusEl.innerHTML = '<span class="spinner"></span> 처리중';
+            } else if (status === 'completed') {
+                statusEl.textContent = '완료';
+            } else if (status === 'error') {
+                statusEl.textContent = '오류';
+            }
+
+            if (data) {
+                document.getElementById(`stage${stageNum}-data`).textContent =
+                    typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+            }
+        }
+
+        async function simulateWorkflow(inputData, finalResult) {
+            // Stage 1: 청구 접수
+            updateStage(1, 'processing', inputData);
+            await sleep(300);
+            updateStage(1, 'completed', inputData);
+
+            // Stage 2: 고객/증권 조회
+            updateStage(2, 'processing');
+            await sleep(400);
+            const policyData = {
+                policy_id: inputData.policy_id,
+                customer: finalResult.customer,
+                policy_status: 'active',
+                coverage_period: '2024-01-01 ~ 2024-12-31'
+            };
+            updateStage(2, 'completed', policyData);
+
+            // Stage 3: AI OCR 앙상블
+            updateStage(3, 'processing');
+            await sleep(600);
+            const ocrData = {
+                models: finalResult.ocr_summary.models_used,
+                confidence: finalResult.ocr_summary.ocr_confidence,
+                diagnosis: finalResult.ocr_summary.diagnosis,
+                method: finalResult.ocr_summary.ocr_method
+            };
+            updateStage(3, 'completed', ocrData);
+
+            // Stage 4: 중복 검사
+            updateStage(4, 'processing');
+            await sleep(300);
+            const dupCheck = {
+                is_duplicate: false,
+                similar_claims: 0,
+                check_passed: true
+            };
+            updateStage(4, 'completed', dupCheck);
+
+            // Stage 5: 보장 분석
+            updateStage(5, 'processing');
+            await sleep(500);
+            updateStage(5, 'completed', finalResult.payout_details);
+
+            // Stage 6: 자동 심사
+            updateStage(6, 'processing');
+            await sleep(400);
+            updateStage(6, 'completed', finalResult.review_result);
+
+            // 결과 표시
+            showResult(finalResult);
+        }
+
+        function showResult(result) {
+            const panel = document.getElementById('resultPanel');
+            panel.classList.add('show');
+
+            const statusEl = document.getElementById('resultStatus');
+            statusEl.textContent = result.review_result.status === 'approved' ? '승인' : '거절';
+            statusEl.className = 'result-status' + (result.review_result.status !== 'approved' ? ' rejected' : '');
+
+            document.getElementById('resultDecision').textContent = result.review_result.decision;
+            document.getElementById('resultAmount').textContent =
+                '₩' + (result.payout_details?.total_approved || 0).toLocaleString();
+
+            // OCR 신뢰도
+            const confidence = Math.round((result.ocr_summary?.ocr_confidence || 0) * 100);
+            document.getElementById('confidenceFill').style.width = confidence + '%';
+            document.getElementById('confidenceText').textContent = confidence + '%';
+            document.getElementById('ocrMethod').textContent = result.ocr_summary?.ocr_method || '-';
+
+            // AI 모델 뱃지
+            const modelsEl = document.getElementById('aiModels');
+            modelsEl.innerHTML = '';
+            (result.ocr_summary?.models_used || []).forEach(model => {
+                const badge = document.createElement('span');
+                badge.className = 'ai-model-badge';
+                badge.textContent = model;
+                modelsEl.appendChild(badge);
+            });
+
+            // 진단 정보
+            const diagnosis = result.ocr_summary?.diagnosis || '-';
+            const diagParts = diagnosis.split(' (');
+            document.getElementById('diagnosisName').textContent = diagParts[0] || '-';
+            document.getElementById('diagnosisCode').textContent = diagParts[1]?.replace(')', '') || '-';
+            document.getElementById('treatmentType').textContent = result.ocr_summary?.treatment || '-';
+            document.getElementById('hospitalDays').textContent =
+                result.ocr_summary?.hospital_days ? result.ocr_summary.hospital_days + '일' : '-';
+
+            // 지급 내역
+            const breakdownEl = document.getElementById('payoutBreakdown');
+            breakdownEl.innerHTML = '<h3 style="margin-bottom: 15px; font-size: 1em;">지급 내역</h3>';
+            (result.payout_details?.breakdown || []).forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'payout-item';
+                div.innerHTML = `
+                    <div>
+                        <div class="name">${item.item}</div>
+                        <div class="calc">${item.calculation}</div>
+                    </div>
+                    <div class="amount">₩${item.amount.toLocaleString()}</div>
+                `;
+                breakdownEl.appendChild(div);
+            });
+
+            // 메타데이터
+            document.getElementById('processTime').textContent =
+                '처리시간: ' + (result.metadata?.processing_time_ms || '-') + 'ms';
+            document.getElementById('autoApproveReason').textContent =
+                result.metadata?.auto_approve_reason || '-';
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function submitClaim() {
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = '처리중...';
+
+            resetWorkflow();
+
+            const inputData = {
+                policy_id: document.getElementById('policy_id').value,
+                customer_name: document.getElementById('customer_name').value,
+                claim_case_id: document.getElementById('claim_case_id').value,
+                claim_type: document.getElementById('claim_type').value,
+                claim_amount: parseInt(document.getElementById('claim_amount').value)
+            };
+
+            try {
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(inputData)
+                });
+
+                const result = await response.json();
+
+                // 워크플로우 시뮬레이션 (실제 데이터로)
+                await simulateWorkflow(inputData, result);
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('n8n 서버에 연결할 수 없습니다.\n\n서버가 실행 중인지 확인하세요:\nhttp://localhost:5678');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '🚀 청구 심사 요청';
+        }
+    </script>
+</body>
+</html>

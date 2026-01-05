@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 보험심사 시스템 - InsurTech</title>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #f5f7fa; --bg-secondary: #ffffff; --bg-card: #ffffff;
+            --accent-blue: #2563eb; --accent-green: #10b981; --accent-orange: #f59e0b; --accent-red: #ef4444; --accent-purple: #8b5cf6;
+            --text-primary: #1e293b; --text-secondary: #64748b; --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+        }
+        body { font-family: 'Pretendard', -apple-system, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+
+        /* 헤더 */
+        .top-header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 12px 30px; display: flex; justify-content: space-between; align-items: center; position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 60px; }
+        .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.2em; color: var(--accent-blue); }
+        .logo i { font-size: 1.5em; }
+        .header-nav { display: flex; gap: 5px; }
+        .nav-btn { padding: 10px 20px; border-radius: 8px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 0.95em; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+        .nav-btn:hover { background: var(--bg-primary); color: var(--text-primary); }
+        .nav-btn.active { background: var(--accent-blue); color: white; }
+        .nav-btn .badge { background: var(--accent-red); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; margin-left: 5px; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        .btn-primary { padding: 10px 20px; background: var(--accent-blue); color: white; border: none; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .user-info { display: flex; align-items: center; gap: 10px; padding: 8px 15px; background: var(--bg-primary); border-radius: 8px; }
+        .user-avatar { width: 32px; height: 32px; background: var(--accent-blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; }
+
+        /* 메인 컨테이너 */
+        .main-container { margin-top: 60px; padding: 20px 30px; min-height: calc(100vh - 60px); }
+
+        /* 통계 카드 */
+        .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; margin-bottom: 25px; }
+        .stat-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
+        .stat-card .label { font-size: 0.85em; color: var(--text-secondary); margin-bottom: 8px; }
+        .stat-card .value { font-size: 1.8em; font-weight: 700; color: var(--text-primary); }
+        .stat-card .value.blue { color: var(--accent-blue); }
+        .stat-card .value.green { color: var(--accent-green); }
+        .stat-card .value.orange { color: var(--accent-orange); }
+
+        /* 청구 목록 섹션 */
+        .claims-section { background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color); }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 25px; border-bottom: 1px solid var(--border-color); }
+        .section-title { font-size: 1.1em; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .section-title i { color: var(--accent-blue); }
+        .filter-group { display: flex; gap: 10px; align-items: center; }
+        .filter-tabs { display: flex; gap: 5px; background: var(--bg-primary); padding: 4px; border-radius: 8px; }
+        .filter-tab { padding: 8px 16px; border-radius: 6px; font-size: 0.85em; cursor: pointer; color: var(--text-secondary); border: none; background: none; }
+        .filter-tab:hover { color: var(--text-primary); }
+        .filter-tab.active { background: var(--bg-secondary); color: var(--accent-blue); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .search-box { display: flex; align-items: center; background: var(--bg-primary); border-radius: 8px; padding: 8px 15px; gap: 10px; border: 1px solid var(--border-color); }
+        .search-box input { background: none; border: none; color: var(--text-primary); outline: none; width: 250px; font-size: 0.9em; }
+        .search-box i { color: var(--text-muted); }
+
+        /* 청구 테이블 */
+        .claims-table { width: 100%; border-collapse: collapse; }
+        .claims-table th { text-align: left; padding: 15px 20px; font-size: 0.8em; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-color); font-weight: 500; background: var(--bg-primary); }
+        .claims-table td { padding: 16px 20px; border-bottom: 1px solid var(--border-color); vertical-align: middle; font-size: 0.9em; }
+        .claims-table tbody tr { cursor: pointer; transition: background 0.2s; }
+        .claims-table tbody tr:hover { background: #f8fafc; }
+        .claims-table tr.selected { background: #eff6ff; }
+        .claim-number { font-weight: 600; color: var(--accent-blue); }
+        .customer-cell { display: flex; align-items: center; gap: 12px; }
+        .customer-avatar { width: 36px; height: 36px; background: linear-gradient(135deg, #e0e7ff, #c7d2fe); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.9em; color: var(--accent-blue); }
+        .customer-name { font-weight: 500; }
+        .customer-policy { font-size: 0.8em; color: var(--text-muted); }
+        .claim-type-badge { padding: 5px 12px; border-radius: 6px; font-size: 0.8em; font-weight: 500; }
+        .claim-type-badge.HOSPITALIZATION { background: #dbeafe; color: #1d4ed8; }
+        .claim-type-badge.SURGERY { background: #f3e8ff; color: #7c3aed; }
+        .claim-type-badge.OUTPATIENT { background: #d1fae5; color: #059669; }
+        .amount { font-weight: 600; font-family: 'Roboto Mono', monospace; }
+        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 0.8em; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+        .status-badge.PENDING_REVIEW { background: #fef3c7; color: #b45309; }
+        .status-badge.APPROVED { background: #d1fae5; color: #059669; }
+        .status-badge.REJECTED { background: #fee2e2; color: #dc2626; }
+        .status-badge.AI_PROCESSING { background: #f3e8ff; color: #7c3aed; }
+        .ai-score-bar { width: 80px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+        .ai-score-fill { height: 100%; border-radius: 3px; }
+        .ai-score-fill.high { background: var(--accent-green); }
+        .ai-score-fill.medium { background: var(--accent-orange); }
+        .ai-score-fill.low { background: var(--accent-red); }
+        .action-btn { padding: 8px 16px; border-radius: 6px; font-size: 0.85em; font-weight: 500; cursor: pointer; border: none; }
+        .action-btn.view { background: var(--accent-blue); color: white; }
+        .action-btn.view:hover { background: #1d4ed8; }
+
+        /* 상세 모달 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-start; justify-content: center; padding: 30px; overflow-y: auto; }
+        .modal-overlay.show { display: flex; }
+        .modal-container { background: var(--bg-secondary); border-radius: 16px; width: 100%; max-width: 1400px; max-height: calc(100vh - 60px); overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 30px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); }
+        .modal-header h2 { font-size: 1.2em; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .modal-header h2 i { color: var(--accent-blue); }
+        .modal-close { width: 40px; height: 40px; border-radius: 10px; border: none; background: var(--bg-secondary); cursor: pointer; font-size: 1.2em; display: flex; align-items: center; justify-content: center; }
+        .modal-close:hover { background: #fee2e2; color: var(--accent-red); }
+        .modal-body { flex: 1; overflow-y: auto; padding: 30px; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 15px; padding: 20px 30px; border-top: 1px solid var(--border-color); background: var(--bg-primary); }
+        .btn-approve { padding: 12px 30px; background: var(--accent-green); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.95em; }
+        .btn-approve:hover { background: #059669; }
+        .btn-reject { padding: 12px 30px; background: white; color: var(--accent-red); border: 2px solid var(--accent-red); border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.95em; }
+        .btn-reject:hover { background: #fee2e2; }
+
+        /* 상세 내용 그리드 */
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .detail-column { display: flex; flex-direction: column; gap: 25px; }
+        .detail-section { background: var(--bg-primary); border-radius: 12px; padding: 20px; }
+        .detail-section-title { font-size: 0.9em; font-weight: 600; color: var(--text-primary); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+        .detail-section-title i { color: var(--accent-blue); }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .info-item { background: white; padding: 12px 15px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .info-item .label { font-size: 0.75em; color: var(--text-muted); margin-bottom: 4px; }
+        .info-item .value { font-weight: 600; font-size: 0.95em; }
+
+        /* 검증 결과 */
+        .validation-list { display: flex; flex-direction: column; gap: 10px; }
+        .validation-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; background: white; border-radius: 8px; font-size: 0.9em; border-left: 4px solid transparent; }
+        .validation-item.pass { border-left-color: var(--accent-green); }
+        .validation-item.pass i { color: var(--accent-green); }
+        .validation-item.fail { border-left-color: var(--accent-red); background: #fef2f2; }
+        .validation-item.fail i { color: var(--accent-red); }
+        .validation-item.warn { border-left-color: var(--accent-orange); background: #fffbeb; }
+        .validation-item.warn i { color: var(--accent-orange); }
+
+        /* 담보 리스트 */
+        .coverage-list { display: flex; flex-direction: column; gap: 12px; }
+        .coverage-item { background: white; border-radius: 10px; padding: 15px; border: 1px solid var(--border-color); }
+        .coverage-item.applied { border-color: var(--accent-green); background: #f0fdf4; }
+        .coverage-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .coverage-name { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95em; }
+        .coverage-name i.applied { color: var(--accent-green); }
+        .coverage-name i.not-applied { color: var(--text-muted); }
+        .coverage-type-tag { font-size: 0.75em; padding: 4px 10px; border-radius: 4px; background: var(--bg-primary); color: var(--text-secondary); }
+        .coverage-details { display: flex; flex-wrap: wrap; gap: 15px; font-size: 0.85em; color: var(--text-secondary); }
+        .coverage-calc { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); }
+        .calc-formula { font-family: 'Roboto Mono', monospace; font-size: 0.85em; color: var(--accent-blue); background: #eff6ff; padding: 8px 12px; border-radius: 6px; }
+        .term-reference { margin-top: 10px; padding: 10px; background: #faf5ff; border-radius: 6px; border-left: 3px solid var(--accent-purple); }
+        .term-reference .article { font-weight: 600; color: var(--accent-purple); font-size: 0.85em; }
+        .term-reference .content { font-size: 0.8em; color: var(--text-secondary); margin-top: 5px; }
+
+        /* 지급 산출 */
+        .payout-breakdown { display: flex; flex-direction: column; gap: 15px; }
+        .breakdown-item { background: white; border-radius: 10px; padding: 15px; border: 1px solid var(--border-color); }
+        .breakdown-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .breakdown-name { font-weight: 600; }
+        .breakdown-amount { font-weight: 700; font-family: 'Roboto Mono', monospace; }
+        .breakdown-amount.approved { color: var(--accent-green); }
+        .breakdown-amount.rejected { color: var(--accent-red); }
+        .breakdown-calc { background: var(--bg-primary); padding: 10px 12px; border-radius: 6px; margin-bottom: 8px; }
+        .breakdown-calc code { font-family: 'Roboto Mono', monospace; font-size: 0.85em; color: var(--accent-blue); }
+        .breakdown-reason { font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .breakdown-reason i { color: var(--accent-orange); }
+
+        /* AI 모델 비교 */
+        .ai-models-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+        .model-card { background: white; border-radius: 12px; padding: 20px; border: 2px solid var(--border-color); transition: all 0.3s; }
+        .model-card:hover { border-color: var(--accent-blue); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1); }
+        .model-card.selected { border-color: var(--accent-green); background: #f0fdf4; }
+        .model-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+        .model-info h4 { font-size: 1.1em; font-weight: 600; margin-bottom: 4px; }
+        .model-provider { font-size: 0.8em; color: var(--text-muted); }
+        .model-stats { text-align: right; }
+        .model-rating { color: var(--accent-orange); font-weight: 600; }
+        .model-accuracy { font-size: 0.8em; color: var(--accent-green); }
+        .model-recommendation { padding: 12px 15px; border-radius: 8px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .model-recommendation.AUTO_APPROVE { background: #d1fae5; color: #059669; }
+        .model-recommendation.MANUAL_REVIEW { background: #fef3c7; color: #b45309; }
+        .model-recommendation.REJECT { background: #fee2e2; color: #dc2626; }
+        .model-amounts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .model-amount-box { background: var(--bg-primary); padding: 12px; border-radius: 8px; text-align: center; }
+        .model-amount-box .label { font-size: 0.75em; color: var(--text-muted); margin-bottom: 4px; }
+        .model-amount-box .value { font-weight: 700; font-family: 'Roboto Mono', monospace; }
+        .model-amount-box .value.approved { color: var(--accent-green); }
+        .model-amount-box .value.rejected { color: var(--accent-red); }
+        .model-breakdown-list { border-top: 1px solid var(--border-color); padding-top: 15px; margin-bottom: 15px; }
+        .model-breakdown-item { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border-color); font-size: 0.85em; }
+        .model-breakdown-item:last-child { border-bottom: none; }
+        .model-breakdown-item .name { color: var(--text-secondary); }
+        .model-breakdown-item .amount { font-weight: 600; color: var(--accent-blue); }
+        .model-breakdown-item .term { font-size: 0.75em; color: var(--accent-purple); margin-top: 3px; }
+        .model-reasoning { margin-bottom: 15px; }
+        .model-reasoning summary { cursor: pointer; font-size: 0.85em; color: var(--text-muted); padding: 8px 0; font-weight: 500; }
+        .model-reasoning pre { font-size: 0.8em; background: var(--bg-primary); padding: 12px; border-radius: 8px; white-space: pre-wrap; color: var(--text-secondary); margin-top: 10px; max-height: 200px; overflow-y: auto; line-height: 1.5; }
+        .model-actions { display: flex; gap: 10px; }
+        .btn-select-model { flex: 1; padding: 12px; border: none; border-radius: 8px; background: var(--accent-blue); color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .btn-select-model:hover:not(:disabled) { background: #1d4ed8; }
+        .btn-select-model.selected { background: var(--accent-green); }
+        .btn-select-model:disabled { opacity: 0.7; cursor: default; }
+        .btn-rate-model { padding: 12px 20px; border: 2px solid var(--accent-orange); background: transparent; color: var(--accent-orange); border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .btn-rate-model:hover { background: #fffbeb; }
+
+        /* 최종 지급 요약 */
+        .payout-summary { background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; border-radius: 12px; padding: 25px; }
+        .payout-summary h3 { font-size: 1em; font-weight: 500; margin-bottom: 20px; opacity: 0.9; }
+        .payout-summary-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.2); }
+        .payout-summary-row:last-child { border-bottom: none; }
+        .payout-summary-row .label { opacity: 0.8; }
+        .payout-summary-row .value { font-weight: 600; font-family: 'Roboto Mono', monospace; }
+        .payout-summary-row.total { font-size: 1.3em; padding-top: 15px; margin-top: 10px; border-top: 2px solid rgba(255,255,255,0.3); }
+        .payout-summary-row.total .value { font-size: 1.2em; }
+
+        /* 토스트 */
+        .toast { position: fixed; bottom: 30px; right: 30px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 24px; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); transform: translateY(100px); opacity: 0; transition: all 0.3s; z-index: 1000; }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success i { color: var(--accent-green); font-size: 1.3em; }
+        .toast.error i { color: var(--accent-red); font-size: 1.3em; }
+
+        /* 로딩 */
+        .loading { display: flex; align-items: center; justify-content: center; padding: 60px; }
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--border-color); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 빈 상태 */
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+        .empty-state i { font-size: 3em; margin-bottom: 15px; opacity: 0.5; }
+
+        /* 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* 약관 전체보기 모달 */
+        .term-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 300; display: none; align-items: center; justify-content: center; padding: 30px; }
+        .term-modal-overlay.show { display: flex; }
+        .term-modal { background: white; border-radius: 16px; width: 100%; max-width: 800px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.3); }
+        .term-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 25px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+        .term-modal-header h3 { font-size: 1.2em; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .term-modal-body { flex: 1; overflow-y: auto; padding: 25px; }
+        .term-article-box { background: #f8fafc; border-radius: 12px; padding: 20px; margin-bottom: 20px; border-left: 4px solid var(--accent-purple); }
+        .term-article-number { font-size: 0.9em; color: var(--accent-purple); font-weight: 600; margin-bottom: 8px; }
+        .term-article-title { font-size: 1.1em; font-weight: 700; color: var(--text-primary); margin-bottom: 15px; }
+        .term-article-content { font-size: 0.95em; line-height: 1.8; color: var(--text-secondary); white-space: pre-wrap; }
+        .term-calculation-box { background: #eff6ff; border-radius: 10px; padding: 15px; margin-top: 15px; }
+        .term-calculation-box h4 { font-size: 0.9em; color: var(--accent-blue); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .term-calculation-box code { font-family: 'Roboto Mono', monospace; font-size: 0.9em; background: white; padding: 8px 12px; border-radius: 6px; display: block; color: var(--accent-blue); }
+        .term-reference-clickable { cursor: pointer; transition: all 0.2s; }
+        .term-reference-clickable:hover { background: #ede9fe; transform: translateX(3px); }
+        .term-reference-clickable .article { display: flex; align-items: center; gap: 5px; }
+        .term-reference-clickable .article::after { content: '→ 전문보기'; font-size: 0.7em; color: var(--accent-purple); opacity: 0.7; margin-left: 10px; }
+
+        /* 금액 수정 모달 */
+        .edit-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 300; display: none; align-items: center; justify-content: center; padding: 30px; }
+        .edit-modal-overlay.show { display: flex; }
+        .edit-modal { background: white; border-radius: 16px; width: 100%; max-width: 700px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.3); }
+        .edit-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 25px; background: linear-gradient(135deg, #059669, #10b981); color: white; }
+        .edit-modal-header h3 { font-size: 1.1em; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .edit-modal-body { flex: 1; overflow-y: auto; padding: 25px; }
+        .edit-form-group { margin-bottom: 20px; }
+        .edit-form-group label { display: block; font-size: 0.85em; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+        .edit-form-group input, .edit-form-group textarea { width: 100%; padding: 12px 15px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 0.95em; transition: border-color 0.2s; }
+        .edit-form-group input:focus, .edit-form-group textarea:focus { outline: none; border-color: var(--accent-blue); }
+        .edit-form-group input[type="number"] { font-family: 'Roboto Mono', monospace; font-weight: 600; }
+        .edit-breakdown-list { display: flex; flex-direction: column; gap: 15px; }
+        .edit-breakdown-item { background: var(--bg-primary); border-radius: 10px; padding: 15px; }
+        .edit-breakdown-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: 600; }
+        .edit-breakdown-item-header .original { font-size: 0.85em; color: var(--text-muted); }
+        .edit-amount-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .edit-modal-footer { display: flex; justify-content: flex-end; gap: 15px; padding: 20px 25px; border-top: 1px solid var(--border-color); background: var(--bg-primary); }
+        .btn-save-edit { padding: 12px 30px; background: var(--accent-green); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .btn-save-edit:hover { background: #059669; }
+        .btn-cancel-edit { padding: 12px 30px; background: white; color: var(--text-secondary); border: 2px solid var(--border-color); border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .btn-cancel-edit:hover { background: var(--bg-primary); }
+        .btn-edit-amounts { padding: 10px 20px; background: var(--accent-purple); color: white; border: none; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 15px; }
+        .btn-edit-amounts:hover { background: #7c3aed; }
+
+        /* 팩터 관련 스타일 */
+        .factor-section { background: linear-gradient(135deg, #faf5ff, #f3e8ff); border: 1px solid #e9d5ff; border-radius: 12px; padding: 20px; margin-top: 20px; }
+        .factor-section-title { font-size: 0.9em; font-weight: 600; color: #7c3aed; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .factor-calculation-flow { display: flex; flex-direction: column; gap: 12px; }
+        .factor-step { background: white; border-radius: 10px; padding: 15px; border: 1px solid #e9d5ff; position: relative; }
+        .factor-step::before { content: ''; position: absolute; left: 50%; bottom: -12px; width: 2px; height: 12px; background: #c4b5fd; }
+        .factor-step:last-child::before { display: none; }
+        .factor-step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .factor-step-title { font-weight: 600; font-size: 0.9em; color: var(--text-primary); }
+        .factor-step-amount { font-family: 'Roboto Mono', monospace; font-weight: 700; color: var(--accent-blue); }
+        .factor-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; font-size: 0.85em; margin-bottom: 6px; }
+        .factor-row:last-child { margin-bottom: 0; }
+        .factor-name { color: var(--text-secondary); flex: 1; }
+        .factor-value { font-family: 'Roboto Mono', monospace; font-weight: 600; color: #7c3aed; min-width: 60px; text-align: right; padding: 4px 10px; background: #ede9fe; border-radius: 4px; }
+        .factor-result { font-family: 'Roboto Mono', monospace; font-weight: 600; color: var(--accent-green); min-width: 100px; text-align: right; }
+        .factor-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75em; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+        .factor-badge.increase { background: #dcfce7; color: #16a34a; }
+        .factor-badge.decrease { background: #fee2e2; color: #dc2626; }
+        .factor-badge.neutral { background: #f1f5f9; color: #64748b; }
+        .factor-formula-box { background: #eff6ff; border-radius: 8px; padding: 12px; margin-top: 12px; border-left: 3px solid var(--accent-blue); }
+        .factor-formula-box code { font-family: 'Roboto Mono', monospace; font-size: 0.85em; color: var(--accent-blue); }
+        .factor-summary { background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border-radius: 10px; padding: 15px 20px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .factor-summary-label { font-size: 0.9em; opacity: 0.9; }
+        .factor-summary-value { font-size: 1.3em; font-weight: 700; font-family: 'Roboto Mono', monospace; }
+
+        /* 팩터 조정 모달 */
+        .factor-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 300; display: none; align-items: center; justify-content: center; padding: 30px; }
+        .factor-modal-overlay.show { display: flex; }
+        .factor-modal { background: white; border-radius: 16px; width: 100%; max-width: 800px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.3); }
+        .factor-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 25px; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; }
+        .factor-modal-header h3 { font-size: 1.1em; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .factor-modal-body { flex: 1; overflow-y: auto; padding: 25px; }
+        .factor-edit-group { margin-bottom: 20px; background: #faf5ff; border-radius: 10px; padding: 15px; border: 1px solid #e9d5ff; }
+        .factor-edit-title { font-weight: 600; color: #7c3aed; margin-bottom: 12px; font-size: 0.9em; }
+        .factor-edit-row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 15px; align-items: center; padding: 10px 0; border-bottom: 1px solid #e9d5ff; }
+        .factor-edit-row:last-child { border-bottom: none; }
+        .factor-edit-label { font-size: 0.9em; color: var(--text-secondary); }
+        .factor-edit-input { padding: 8px 12px; border: 2px solid #e9d5ff; border-radius: 6px; font-size: 0.9em; font-family: 'Roboto Mono', monospace; text-align: center; width: 100%; }
+        .factor-edit-input:focus { outline: none; border-color: #a855f7; }
+        .factor-edit-result { font-family: 'Roboto Mono', monospace; font-weight: 600; color: var(--accent-green); text-align: right; }
+        .factor-preset-btns { display: flex; gap: 8px; margin-top: 10px; }
+        .factor-preset-btn { padding: 6px 12px; border: 1px solid #e9d5ff; background: white; border-radius: 6px; font-size: 0.8em; cursor: pointer; transition: all 0.2s; }
+        .factor-preset-btn:hover { background: #ede9fe; border-color: #a855f7; }
+        .factor-modal-footer { display: flex; justify-content: space-between; align-items: center; padding: 20px 25px; border-top: 1px solid var(--border-color); background: var(--bg-primary); }
+        .factor-total-preview { font-size: 1em; }
+        .factor-total-preview strong { color: var(--accent-purple); font-family: 'Roboto Mono', monospace; font-size: 1.2em; }
+        .btn-factor-actions { display: flex; gap: 10px; }
+        .btn-apply-factor { padding: 12px 25px; background: #7c3aed; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .btn-apply-factor:hover { background: #6d28d9; }
+        .btn-cancel-factor { padding: 12px 25px; background: white; color: var(--text-secondary); border: 2px solid var(--border-color); border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .btn-adjust-factors { padding: 10px 20px; background: #a855f7; color: white; border: none; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+        .btn-adjust-factors:hover { background: #9333ea; }
+
+        /* AI 모델 카드 팩터 표시 */
+        .model-factors { background: #faf5ff; border-radius: 8px; padding: 12px; margin-bottom: 15px; border: 1px solid #e9d5ff; }
+        .model-factors-title { font-size: 0.8em; color: #7c3aed; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .model-factor-item { display: flex; justify-content: space-between; font-size: 0.8em; padding: 4px 0; }
+        .model-factor-item .name { color: var(--text-secondary); }
+        .model-factor-item .value { font-family: 'Roboto Mono', monospace; font-weight: 600; color: #7c3aed; }
+    </style>
+</head>
+<body>
+    <!-- 상단 헤더 -->
+    <header class="top-header">
+        <div class="logo"><i class="ri-shield-check-fill"></i> InsurTech AI</div>
+        <nav class="header-nav">
+            <button class="nav-btn active" onclick="navigateTo('claims')"><i class="ri-file-list-3-line"></i> 청구 심사 <span class="badge" id="pendingBadge">0</span></button>
+            <button class="nav-btn" onclick="navigateTo('policies')"><i class="ri-file-shield-2-line"></i> 증권 관리</button>
+            <button class="nav-btn" onclick="navigateTo('customers')"><i class="ri-user-3-line"></i> 고객 관리</button>
+            <button class="nav-btn" onclick="navigateTo('reports')"><i class="ri-bar-chart-box-line"></i> 통계/리포트</button>
+        </nav>
+        <div class="header-actions">
+            <button class="btn-primary" onclick="testSubmitClaim()"><i class="ri-add-line"></i> 신규 청구 등록</button>
+            <div class="user-info">
+                <div class="user-avatar">김</div>
+                <div>
+                    <div style="font-weight:600;font-size:0.9em;">김심사</div>
+                    <div style="font-size:0.75em;color:var(--text-muted);">심사팀 선임</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="main-container">
+        <!-- 통계 카드 -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="label">오늘 접수</div>
+                <div class="value blue" id="statTodayClaims">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">검토 대기</div>
+                <div class="value orange" id="statPending">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">AI 자동처리율</div>
+                <div class="value" id="statAutoRate">-%</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">오늘 승인 금액</div>
+                <div class="value green" id="statApprovedAmount">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">평균 사기위험</div>
+                <div class="value" id="statFraudScore">-</div>
+            </div>
+        </div>
+
+        <!-- 청구 목록 -->
+        <div class="claims-section">
+            <div class="section-header">
+                <div class="section-title"><i class="ri-file-list-3-line"></i> 청구 심사 목록</div>
+                <div class="filter-group">
+                    <div class="filter-tabs">
+                        <button class="filter-tab active" data-status="all">전체</button>
+                        <button class="filter-tab" data-status="PENDING_REVIEW">검토필요</button>
+                        <button class="filter-tab" data-status="APPROVED">승인</button>
+                        <button class="filter-tab" data-status="REJECTED">거절</button>
+                    </div>
+                    <div class="search-box">
+                        <i class="ri-search-line"></i>
+                        <input type="text" id="searchInput" placeholder="청구번호, 고객명, 증권번호 검색..." onkeyup="handleSearch(event)">
+                    </div>
+                    <button class="btn-primary" onclick="loadData()" style="padding:10px 15px;"><i class="ri-refresh-line"></i></button>
+                </div>
+            </div>
+            <table class="claims-table">
+                <thead>
+                    <tr>
+                        <th>청구번호</th>
+                        <th>고객정보</th>
+                        <th>청구유형</th>
+                        <th>진단명</th>
+                        <th>청구금액</th>
+                        <th>AI신뢰도</th>
+                        <th>상태</th>
+                        <th>접수일</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="claimsTableBody">
+                    <tr><td colspan="9"><div class="loading"><div class="spinner"></div></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- 상세 모달 -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="ri-file-text-line"></i> 청구 상세 심사 - <span id="modalClaimNumber">-</span></h2>
+                <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+            <div class="modal-footer" id="modalFooter" style="display:none;">
+                <button class="btn-reject" onclick="rejectClaim()"><i class="ri-close-circle-line"></i> 거절</button>
+                <button class="btn-approve" onclick="approveClaim()"><i class="ri-check-line"></i> 승인 처리</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"><i class="ri-check-double-line"></i><span id="toastMessage">처리가 완료되었습니다</span></div>
+
+    <!-- 약관 전체보기 모달 -->
+    <div class="term-modal-overlay" id="termModal" onclick="if(event.target===this)closeTermModal()">
+        <div class="term-modal">
+            <div class="term-modal-header">
+                <h3><i class="ri-book-open-line"></i> <span id="termModalTitle">약관 조항</span></h3>
+                <button class="modal-close" onclick="closeTermModal()" style="background:rgba(255,255,255,0.2);color:white;"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="term-modal-body" id="termModalBody">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 금액 수정 모달 -->
+    <div class="edit-modal-overlay" id="editModal" onclick="if(event.target===this)closeEditModal()">
+        <div class="edit-modal">
+            <div class="edit-modal-header">
+                <h3><i class="ri-edit-line"></i> 지급액 직접 수정</h3>
+                <button class="modal-close" onclick="closeEditModal()" style="background:rgba(255,255,255,0.2);color:white;"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="edit-modal-body" id="editModalBody">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+            <div class="edit-modal-footer">
+                <button class="btn-cancel-edit" onclick="closeEditModal()">취소</button>
+                <button class="btn-save-edit" onclick="saveEditedAmounts()"><i class="ri-save-line"></i> 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 팩터 조정 모달 -->
+    <div class="factor-modal-overlay" id="factorModal" onclick="if(event.target===this)closeFactorModal()">
+        <div class="factor-modal">
+            <div class="factor-modal-header">
+                <h3><i class="ri-percent-line"></i> 보험금 산정 팩터 조정</h3>
+                <button class="modal-close" onclick="closeFactorModal()" style="background:rgba(255,255,255,0.2);color:white;"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="factor-modal-body" id="factorModalBody">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+            <div class="factor-modal-footer">
+                <div class="factor-total-preview">
+                    예상 지급액: <strong id="factorTotalPreview">₩0</strong>
+                </div>
+                <div class="btn-factor-actions">
+                    <button class="btn-cancel-factor" onclick="closeFactorModal()">취소</button>
+                    <button class="btn-apply-factor" onclick="applyFactorAdjustments()"><i class="ri-check-line"></i> 팩터 적용</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        let claimsData = [];
+        let allClaimsData = [];
+        let selectedClaimId = null;
+        let currentFilter = 'all';
+        let isLoading = false;
+        let aiModelResults = [];
+        let currentClaimData = null;
+        let policyTermsCache = {};
+        let editingBreakdown = [];
+        let currentFactors = {}; // 현재 적용된 팩터 데이터
+
+        // 기본 팩터 정의 (보험사 실제 팩터 시뮬레이션)
+        const defaultFactors = {
+            // 실손보험 팩터
+            realLoss: {
+                deductibleRate: 0.2,        // 본인부담률 20%
+                payoutRate: 0.8,            // 지급률 80%
+                copaymentMin: 20000,        // 최소 본인부담금
+            },
+            // 정액보험 팩터
+            fixedAmount: {
+                hospitalDaily: 50000,       // 입원일당 기본금액
+                surgeryMultiplier: {        // 수술 종류별 팩터
+                    '1종': 10,
+                    '2종': 20,
+                    '3종': 40,
+                    '4종': 80,
+                },
+            },
+            // 가입자 조건 팩터
+            subscriber: {
+                ageFactor: 1.0,             // 나이 팩터
+                occupationFactor: 1.0,      // 직업 팩터
+                healthFactor: 1.0,          // 건강상태 팩터
+            },
+            // 계약 상태 팩터
+            contract: {
+                reductionPeriodFactor: 1.0, // 감액기간 팩터 (보통 0.5)
+                renewalFactor: 1.0,         // 갱신 팩터
+                bonusFactor: 1.0,           // 무사고 할인 팩터
+            },
+            // 손해율 조정 팩터
+            lossRatio: {
+                adjustmentFactor: 1.0,      // 손해율 조정 팩터
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPolicyTerms();
+            loadData();
+            setupFilterTabs();
+        });
+
+        async function loadData() {
+            if (isLoading) return;
+            isLoading = true;
+            try {
+                await Promise.all([loadStats(), loadClaims()]);
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API_BASE}/claims/stats`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.success) {
+                    const { total, today } = data.data;
+                    document.getElementById('statTodayClaims').textContent = today.total_claims || '0';
+                    document.getElementById('statPending').textContent = data.data.statusDistribution?.find(s => s.status === 'PENDING_REVIEW')?.count || '0';
+                    document.getElementById('statAutoRate').textContent = Math.round(today.auto_process_rate || 0) + '%';
+                    document.getElementById('statApprovedAmount').textContent = '₩' + Number(today.total_approved || 0).toLocaleString();
+                    document.getElementById('statFraudScore').textContent = Number(total.avg_fraud_score || 0).toFixed(1) + '점';
+                    document.getElementById('pendingBadge').textContent = data.data.statusDistribution?.find(s => s.status === 'PENDING_REVIEW')?.count || 0;
+                }
+            } catch (e) {
+                console.error('Stats load error:', e);
+            }
+        }
+
+        async function loadClaims() {
+            const tbody = document.getElementById('claimsTableBody');
+            tbody.innerHTML = '<tr><td colspan="9"><div class="loading"><div class="spinner"></div></div></td></tr>';
+
+            try {
+                const statusParam = currentFilter !== 'all' ? `&status=${currentFilter}` : '';
+                const res = await fetch(`${API_BASE}/claims?limit=50${statusParam}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.success) {
+                    claimsData = data.data;
+                    allClaimsData = [...data.data];
+                    renderClaims();
+                }
+            } catch (e) {
+                console.error('Claims load error:', e);
+                tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><i class="ri-error-warning-line"></i><div>서버 연결 실패</div><button onclick="loadData()" class="btn-primary" style="margin-top:15px;">다시 시도</button></td></tr>`;
+            }
+        }
+
+        function renderClaims() {
+            const tbody = document.getElementById('claimsTableBody');
+            if (claimsData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="ri-inbox-line"></i><div>청구 데이터가 없습니다</div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = claimsData.map((claim, index) => {
+                const aiScore = Number(claim.ai_confidence_score) || 0;
+                const scoreClass = aiScore >= 80 ? 'high' : aiScore >= 50 ? 'medium' : 'low';
+                const statusLabel = { 'RECEIVED': '접수', 'AI_PROCESSING': 'AI처리중', 'PENDING_REVIEW': '검토필요', 'APPROVED': '승인', 'REJECTED': '거절' }[claim.status] || claim.status;
+                const typeLabel = { 'HOSPITALIZATION': '입원', 'SURGERY': '수술', 'OUTPATIENT': '통원', 'DIAGNOSIS': '진단' }[claim.claim_type] || claim.claim_type;
+                const claimDate = new Date(claim.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                return `
+                    <tr onclick="openClaimDetail(${claim.id})">
+                        <td><span class="claim-number">${claim.claim_number || '-'}</span></td>
+                        <td>
+                            <div class="customer-cell">
+                                <div class="customer-avatar">${(claim.customer_name || '?')[0]}</div>
+                                <div>
+                                    <div class="customer-name">${claim.customer_name || '-'}</div>
+                                    <div class="customer-policy">${claim.policy_number || '-'}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="claim-type-badge ${claim.claim_type}">${typeLabel}</span></td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${claim.diagnosis_name || '-'}</td>
+                        <td class="amount">₩${Number(claim.total_claimed_amount || 0).toLocaleString()}</td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="ai-score-bar"><div class="ai-score-fill ${scoreClass}" style="width:${aiScore}%"></div></div>
+                                <span style="font-size:0.85em;font-weight:500;">${aiScore.toFixed(0)}%</span>
+                            </div>
+                        </td>
+                        <td><span class="status-badge ${claim.status}">${statusLabel}</span></td>
+                        <td style="font-size:0.85em;color:var(--text-muted);">${claimDate}</td>
+                        <td><button class="action-btn view" onclick="event.stopPropagation();openClaimDetail(${claim.id})">상세보기</button></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function openClaimDetail(claimId) {
+            selectedClaimId = claimId;
+            document.getElementById('detailModal').classList.add('show');
+            document.getElementById('modalBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const [claimRes, aiRes] = await Promise.all([
+                    fetch(`${API_BASE}/claims/${claimId}`),
+                    fetch(`${API_BASE}/claims/${claimId}/ai-results`)
+                ]);
+
+                if (!claimRes.ok) throw new Error(`HTTP ${claimRes.status}`);
+                const claimData = await claimRes.json();
+
+                aiModelResults = [];
+                if (aiRes.ok) {
+                    const aiData = await aiRes.json();
+                    if (aiData.success) aiModelResults = aiData.data;
+                }
+
+                if (claimData.success) {
+                    renderClaimDetail(claimData.data);
+                } else {
+                    throw new Error(claimData.error || '데이터 로드 실패');
+                }
+            } catch (e) {
+                console.error('Claim detail error:', e);
+                document.getElementById('modalBody').innerHTML = `<div class="empty-state"><i class="ri-error-warning-line"></i><div>상세 정보를 불러올 수 없습니다</div><div style="font-size:0.85em;margin-top:5px;">${e.message}</div></div>`;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.remove('show');
+            selectedClaimId = null;
+        }
+
+        function renderClaimDetail(claim) {
+            currentClaimData = claim; // 현재 청구 데이터 저장
+            document.getElementById('modalClaimNumber').textContent = claim.claim_number || '-';
+
+            let fraudPatterns = [];
+            try { fraudPatterns = claim.fraud_flags ? (typeof claim.fraud_flags === 'string' ? JSON.parse(claim.fraud_flags) : claim.fraud_flags) : []; if (!Array.isArray(fraudPatterns)) fraudPatterns = []; } catch (e) {}
+
+            const aiScore = Number(claim.ai_confidence_score) || 0;
+            const fraudScore = Number(claim.fraud_score) || 0;
+            const validation = claim.validation || {};
+            const coverages = claim.coverages || [];
+            const payoutBreakdown = claim.payout_breakdown || [];
+
+            const validationHtml = validation.exemption_period ? `
+                <div class="detail-section">
+                    <div class="detail-section-title"><i class="ri-checkbox-circle-line"></i> 계약 검증 결과</div>
+                    <div class="validation-list">
+                        <div class="validation-item ${validation.policy_valid ? 'pass' : 'fail'}">
+                            <i class="ri-${validation.policy_valid ? 'check' : 'close'}-circle-fill"></i>
+                            <span>계약 상태: ${validation.policy_valid ? '유효 (ACTIVE)' : '무효'}</span>
+                        </div>
+                        <div class="validation-item ${validation.premium_paid ? 'pass' : 'fail'}">
+                            <i class="ri-${validation.premium_paid ? 'check' : 'close'}-circle-fill"></i>
+                            <span>보험료 납입: ${validation.premium_paid ? '정상 납입' : '미납'}</span>
+                        </div>
+                        <div class="validation-item ${validation.within_coverage_period ? 'pass' : 'fail'}">
+                            <i class="ri-${validation.within_coverage_period ? 'check' : 'close'}-circle-fill"></i>
+                            <span>보장기간: ${validation.within_coverage_period ? '보장기간 내' : '보장기간 외'}</span>
+                        </div>
+                        <div class="validation-item ${!validation.exemption_period?.is_in_period ? 'pass' : 'fail'}">
+                            <i class="ri-${!validation.exemption_period?.is_in_period ? 'check' : 'close'}-circle-fill"></i>
+                            <span>면책기간: ${validation.exemption_period?.message || '-'}</span>
+                        </div>
+                        <div class="validation-item ${!validation.reduction_period?.is_in_period ? 'pass' : 'warn'}">
+                            <i class="ri-${!validation.reduction_period?.is_in_period ? 'check' : 'alert'}-circle-fill"></i>
+                            <span>감액기간: ${validation.reduction_period?.message || '-'}</span>
+                        </div>
+                    </div>
+                </div>
+            ` : '';
+
+            const coveragesHtml = coverages.length > 0 ? `
+                <div class="detail-section">
+                    <div class="detail-section-title"><i class="ri-shield-check-line"></i> 적용 담보 및 약관</div>
+                    <div class="coverage-list">
+                        ${coverages.filter(c => c.is_applied).map(cov => `
+                            <div class="coverage-item applied">
+                                <div class="coverage-header">
+                                    <span class="coverage-name"><i class="ri-check-line applied"></i> ${cov.coverage_name || cov.type_name}</span>
+                                    <span class="coverage-type-tag">${cov.coverage_category === 'REAL_LOSS' ? '실손' : '정액'}</span>
+                                </div>
+                                <div class="coverage-details">
+                                    <span><strong>가입금액:</strong> ₩${Number(cov.insured_amount).toLocaleString()}</span>
+                                    ${cov.coverage_category === 'REAL_LOSS' ? `
+                                        <span><strong>본인부담:</strong> ${Number(cov.deductible_rate)}% (최소 ₩${Number(cov.deductible_amount).toLocaleString()})</span>
+                                        <span><strong>지급률:</strong> ${Number(cov.payout_rate)}%</span>
+                                    ` : ''}
+                                    ${cov.max_days ? `<span><strong>최대일수:</strong> ${cov.max_days}일</span>` : ''}
+                                </div>
+                                ${cov.applied_detail ? `
+                                    <div class="coverage-calc">
+                                        <div class="calc-formula">${cov.applied_detail.calculation || '-'}</div>
+                                    </div>
+                                    ${cov.applied_detail.termReference ? `
+                                        <div class="term-reference term-reference-clickable" onclick="showTermDetail('${cov.applied_detail.termReference.article}', '${cov.applied_detail.termReference.title}', \`${(cov.applied_detail.termReference.content || '').replace(/`/g, "'")}\`, '${cov.applied_detail.termReference.formula || ''}')">
+                                            <div class="article"><i class="ri-book-open-line"></i> ${cov.applied_detail.termReference.article} ${cov.applied_detail.termReference.title}</div>
+                                            <div class="content">${cov.applied_detail.termReference.content}</div>
+                                        </div>
+                                    ` : ''}
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : '';
+
+            // 팩터 계산 시뮬레이션 데이터 생성
+            const factorData = generateFactorData(claim, coverages, payoutBreakdown);
+            currentFactors = factorData;
+
+            const payoutHtml = payoutBreakdown.length > 0 ? `
+                <div class="detail-section">
+                    <div class="detail-section-title"><i class="ri-calculator-line"></i> 지급액 산출 상세</div>
+                    <div class="payout-breakdown">
+                        ${payoutBreakdown.map(item => `
+                            <div class="breakdown-item">
+                                <div class="breakdown-header">
+                                    <span class="breakdown-name">${item.item}</span>
+                                    <span class="breakdown-amount ${item.approvedAmount > 0 ? 'approved' : 'rejected'}">
+                                        ${item.approvedAmount > 0 ? '+' : ''}₩${Number(item.approvedAmount || 0).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div class="breakdown-calc"><code>${item.calculation || '-'}</code></div>
+                                ${item.termReference ? `
+                                    <div class="term-reference term-reference-clickable" onclick="showTermDetail('${item.termReference.article}', '${item.termReference.title}', \`${(item.termReference.content || '').replace(/`/g, "'")}\`, '${item.termReference.formula || ''}')">
+                                        <div class="article"><i class="ri-book-open-line"></i> ${item.termReference.article} ${item.termReference.title}</div>
+                                        <div class="content">${item.termReference.content}</div>
+                                    </div>
+                                ` : ''}
+                                ${item.rejectionReason ? `<div class="breakdown-reason"><i class="ri-information-line"></i> ${item.rejectionReason}</div>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn-edit-amounts" onclick="showEditModal()"><i class="ri-edit-line"></i> 금액 직접 수정</button>
+                        <button class="btn-adjust-factors" onclick="showFactorModal()"><i class="ri-percent-line"></i> 팩터 조정</button>
+                    </div>
+                </div>
+
+                <!-- 팩터 기반 계산 내역 -->
+                <div class="factor-section">
+                    <div class="factor-section-title"><i class="ri-percent-line"></i> 보험금 산정 팩터 적용 내역</div>
+                    <div class="factor-calculation-flow">
+                        ${factorData.steps.map((step, idx) => `
+                            <div class="factor-step">
+                                <div class="factor-step-header">
+                                    <span class="factor-step-title">${step.title}</span>
+                                    <span class="factor-step-amount">₩${step.amount.toLocaleString()}</span>
+                                </div>
+                                ${step.factors.map(f => `
+                                    <div class="factor-row">
+                                        <span class="factor-name">${f.name}</span>
+                                        <span class="factor-value">${f.type === 'rate' ? (f.value * 100).toFixed(0) + '%' : f.type === 'multiplier' ? '×' + f.value : '₩' + f.value.toLocaleString()}</span>
+                                        <span class="factor-badge ${f.effect}">${f.effect === 'increase' ? '↑ 증가' : f.effect === 'decrease' ? '↓ 감소' : '= 유지'}</span>
+                                        <span class="factor-result">${f.result ? '→ ₩' + f.result.toLocaleString() : ''}</span>
+                                    </div>
+                                `).join('')}
+                                ${step.formula ? `
+                                    <div class="factor-formula-box">
+                                        <code>${step.formula}</code>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="factor-summary">
+                        <span class="factor-summary-label"><i class="ri-calculator-line"></i> 팩터 적용 후 최종 지급액</span>
+                        <span class="factor-summary-value">₩${factorData.finalAmount.toLocaleString()}</span>
+                    </div>
+                </div>
+            ` : '';
+
+            const aiModelsHtml = aiModelResults.length > 0 ? `
+                <div class="detail-section" style="grid-column: span 2;">
+                    <div class="detail-section-title"><i class="ri-cpu-line"></i> AI 모델별 심사 결과 비교 (${aiModelResults.length}개 모델)</div>
+                    <div class="ai-models-grid">
+                        ${aiModelResults.map(result => `
+                            <div class="model-card ${result.is_selected ? 'selected' : ''}">
+                                <div class="model-card-header">
+                                    <div class="model-info">
+                                        <h4>${result.model_name}</h4>
+                                        <div class="model-provider">${result.provider}</div>
+                                    </div>
+                                    <div class="model-stats">
+                                        <div class="model-rating">★ ${result.avg_user_rating?.toFixed(1) || '-'}</div>
+                                        <div class="model-accuracy">정확도 ${result.avg_accuracy?.toFixed(0) || '-'}%</div>
+                                    </div>
+                                </div>
+                                <div class="model-recommendation ${result.recommendation}">
+                                    <span>${result.recommendation === 'AUTO_APPROVE' ? '✓ 자동승인 권고' : result.recommendation === 'MANUAL_REVIEW' ? '⚠ 수동검토 필요' : '✗ 거절 권고'}</span>
+                                    <span>신뢰도 ${result.confidence_score.toFixed(0)}%</span>
+                                </div>
+                                <div class="model-amounts">
+                                    <div class="model-amount-box">
+                                        <div class="label">승인금액</div>
+                                        <div class="value approved">₩${result.total_approved_amount.toLocaleString()}</div>
+                                    </div>
+                                    <div class="model-amount-box">
+                                        <div class="label">불인정금액</div>
+                                        <div class="value rejected">₩${result.total_rejected_amount.toLocaleString()}</div>
+                                    </div>
+                                </div>
+                                <!-- 모델별 적용 팩터 -->
+                                <div class="model-factors">
+                                    <div class="model-factors-title"><i class="ri-percent-line"></i> 적용 팩터</div>
+                                    <div class="model-factor-item"><span class="name">본인부담률</span><span class="value">20%</span></div>
+                                    <div class="model-factor-item"><span class="name">지급률</span><span class="value">80%</span></div>
+                                    <div class="model-factor-item"><span class="name">나이팩터</span><span class="value">×1.0</span></div>
+                                    <div class="model-factor-item"><span class="name">감액팩터</span><span class="value">×1.0</span></div>
+                                </div>
+                                <div class="model-breakdown-list">
+                                    ${(result.payout_breakdown || []).map(item => `
+                                        <div class="model-breakdown-item">
+                                            <div>
+                                                <div class="name">${item.item}</div>
+                                                ${item.termReference ? `<div class="term" style="cursor:pointer;" onclick="showTermDetail('${item.termReference.article}', '${item.termReference.title}', \`${(item.termReference.content || '').replace(/`/g, "'")}\`, '${item.termReference.formula || ''}')">${item.termReference.article} ${item.termReference.title} <i class="ri-arrow-right-s-line"></i></div>` : ''}
+                                            </div>
+                                            <div class="amount">₩${item.approvedAmount.toLocaleString()}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="model-reasoning">
+                                    <details>
+                                        <summary><i class="ri-lightbulb-line"></i> AI 추론 근거 보기</summary>
+                                        <pre>${result.reasoning || '-'}</pre>
+                                    </details>
+                                </div>
+                                <div class="model-actions">
+                                    <button class="btn-select-model ${result.is_selected ? 'selected' : ''}" onclick="selectModelResult(${result.id})" ${result.is_selected ? 'disabled' : ''}>
+                                        ${result.is_selected ? '✓ 선택됨' : '이 결과로 적용'}
+                                    </button>
+                                    <button class="btn-rate-model" onclick="showRatingModal(${result.id})"><i class="ri-star-line"></i> 평가</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : '';
+
+            document.getElementById('modalBody').innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-column">
+                        <div class="detail-section">
+                            <div class="detail-section-title"><i class="ri-file-text-line"></i> 청구 기본 정보</div>
+                            <div class="info-grid">
+                                <div class="info-item"><div class="label">청구번호</div><div class="value">${claim.claim_number || '-'}</div></div>
+                                <div class="info-item"><div class="label">고객명</div><div class="value">${claim.customer_name || '-'}</div></div>
+                                <div class="info-item"><div class="label">증권번호</div><div class="value">${claim.policy_number || '-'}</div></div>
+                                <div class="info-item"><div class="label">상품명</div><div class="value">${claim.product_name || '-'}</div></div>
+                                <div class="info-item"><div class="label">진단명</div><div class="value">${claim.diagnosis_name || '-'}</div></div>
+                                <div class="info-item"><div class="label">진단코드</div><div class="value">${claim.diagnosis_code || '-'}</div></div>
+                                <div class="info-item"><div class="label">입원일수</div><div class="value">${claim.hospitalization_days || 0}일</div></div>
+                                <div class="info-item"><div class="label">수술명</div><div class="value">${claim.surgery_name || '-'}</div></div>
+                            </div>
+                        </div>
+                        ${validationHtml}
+                        <div class="detail-section">
+                            <div class="detail-section-title"><i class="ri-alarm-warning-line"></i> 사기 탐지 결과</div>
+                            <div style="padding:15px;background:${fraudScore < 30 ? '#f0fdf4' : fraudScore < 60 ? '#fffbeb' : '#fef2f2'};border-radius:8px;border-left:4px solid ${fraudScore < 30 ? 'var(--accent-green)' : fraudScore < 60 ? 'var(--accent-orange)' : 'var(--accent-red)'};">
+                                <div style="font-weight:600;margin-bottom:10px;color:${fraudScore < 30 ? 'var(--accent-green)' : fraudScore < 60 ? 'var(--accent-orange)' : 'var(--accent-red)'};">
+                                    <i class="ri-${fraudScore < 30 ? 'shield-check' : 'alert'}-line"></i> 위험 점수: ${fraudScore.toFixed(1)}점
+                                </div>
+                                ${fraudPatterns.length > 0 ? fraudPatterns.map(p => `<div style="font-size:0.9em;color:var(--text-secondary);padding:5px 0;">• ${p.name || p.code}: ${p.details || ''}</div>`).join('') : '<div style="color:var(--accent-green);">탐지된 위험 패턴 없음</div>'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-column">
+                        ${coveragesHtml}
+                        ${payoutHtml}
+                        <div class="payout-summary">
+                            <h3><i class="ri-money-dollar-circle-line"></i> 최종 지급 결정</h3>
+                            <div class="payout-summary-row">
+                                <span class="label">총 청구금액</span>
+                                <span class="value">₩${Number(claim.total_claimed_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="payout-summary-row">
+                                <span class="label">불인정금액</span>
+                                <span class="value" style="color:#fca5a5;">-₩${Number(claim.total_rejected_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="payout-summary-row total">
+                                <span class="label">지급 예정금액</span>
+                                <span class="value">₩${Number(claim.total_approved_amount || 0).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ${aiModelsHtml}
+            `;
+
+            const canProcess = ['PENDING_REVIEW', 'RECEIVED', 'AI_PROCESSING'].includes(claim.status);
+            document.getElementById('modalFooter').style.display = canProcess ? 'flex' : 'none';
+        }
+
+        function setupFilterTabs() {
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    currentFilter = this.dataset.status;
+                    document.getElementById('searchInput').value = '';
+                    loadClaims();
+                });
+            });
+        }
+
+        function handleSearch(e) {
+            const query = e.target.value.trim().toLowerCase();
+            if (e.key === 'Escape') { e.target.value = ''; claimsData = [...allClaimsData]; renderClaims(); return; }
+            if (query === '') { claimsData = [...allClaimsData]; renderClaims(); return; }
+            if (e.key === 'Enter' || query.length >= 2) {
+                claimsData = allClaimsData.filter(c =>
+                    (c.claim_number || '').toLowerCase().includes(query) ||
+                    (c.customer_name || '').toLowerCase().includes(query) ||
+                    (c.policy_number || '').toLowerCase().includes(query) ||
+                    (c.diagnosis_name || '').toLowerCase().includes(query)
+                );
+                renderClaims();
+            }
+        }
+
+        async function testSubmitClaim() {
+            showToast('새 청구 심사 요청 중...');
+            const testCases = [
+                { policy: 'POL-2024-001', type: 'HOSPITALIZATION', diagnosis: 'K35.0', name: '급성충수염', days: 4, amount: 1520000 },
+                { policy: 'POL-2024-002', type: 'SURGERY', diagnosis: 'K80.0', name: '담석증', surgery: 'S0501', surgeryName: '복강경 담낭절제술', days: 3, amount: 3500000 },
+                { policy: 'POL-2024-001', type: 'HOSPITALIZATION', diagnosis: 'M54.5', name: '요통', days: 5, amount: 950000 },
+            ];
+            const tc = testCases[Math.floor(Math.random() * testCases.length)];
+            try {
+                const res = await fetch(`${API_BASE}/claims`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ policy_number: tc.policy, customer_name: '테스트고객', claim_type: tc.type, treatment_start_date: new Date().toISOString().split('T')[0], treatment_end_date: new Date().toISOString().split('T')[0], hospital_name: '서울대학교병원', diagnosis_code: tc.diagnosis, diagnosis_name: tc.name, surgery_code: tc.surgery, surgery_name: tc.surgeryName, hospitalization_days: tc.days, total_medical_expense: tc.amount, insured_expense: Math.round(tc.amount * 0.8), uninsured_expense: Math.round(tc.amount * 0.2) })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.success !== false) {
+                    showToast(`청구 심사 완료 (승인액: ₩${Number(data.payout_details?.total_approved || 0).toLocaleString()})`);
+                    await loadData();
+                }
+            } catch (e) { showToast('오류: ' + e.message, 'error'); }
+        }
+
+        async function approveClaim() {
+            if (!selectedClaimId) return;
+            try {
+                const res = await fetch(`${API_BASE}/claims/${selectedClaimId}/approve`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reviewer_name: '김심사', notes: '정상 승인' })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                showToast('청구가 승인되었습니다.');
+                closeModal();
+                await loadData();
+            } catch (e) { showToast('승인 처리 실패: ' + e.message, 'error'); }
+        }
+
+        async function rejectClaim() {
+            if (!selectedClaimId) return;
+            const reason = prompt('거절 사유를 입력하세요:');
+            if (!reason) return;
+            try {
+                const res = await fetch(`${API_BASE}/claims/${selectedClaimId}/reject`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reviewer_name: '김심사', reason })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                showToast('청구가 거절되었습니다.');
+                closeModal();
+                await loadData();
+            } catch (e) { showToast('거절 처리 실패: ' + e.message, 'error'); }
+        }
+
+        async function selectModelResult(resultId) {
+            try {
+                const res = await fetch(`${API_BASE}/claims/${selectedClaimId}/ai-results/${resultId}/select`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ selected_by: '김심사' })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                showToast('AI 모델 결과가 적용되었습니다.');
+                openClaimDetail(selectedClaimId);
+                await loadData();
+            } catch (e) { showToast('선택 실패: ' + e.message, 'error'); }
+        }
+
+        async function showRatingModal(resultId) {
+            const rating = prompt('이 AI 모델의 결과를 평가해주세요 (1-5점):');
+            if (!rating || isNaN(rating) || rating < 1 || rating > 5) return;
+            const feedback = prompt('피드백 (선택):') || '';
+            try {
+                const res = await fetch(`${API_BASE}/claims/ai-results/${resultId}/evaluate`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ evaluator_name: '김심사', evaluator_role: 'REVIEWER', rating: parseInt(rating), is_correct: rating >= 4, feedback_type: rating >= 4 ? 'POSITIVE' : 'NEGATIVE', feedback_text: feedback })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                showToast('평가가 저장되었습니다.');
+            } catch (e) { showToast('평가 저장 실패: ' + e.message, 'error'); }
+        }
+
+        function navigateTo(view) { showToast(`${view} 화면으로 이동 (미구현)`); }
+
+        // ====== 약관 조항 기능 ======
+        async function loadPolicyTerms() {
+            try {
+                const res = await fetch(`${API_BASE}/claims/policies/1`); // 기본 약관 로드
+                // 약관 API 호출
+                const termsRes = await fetch(`${API_BASE}/claims/stats`); // 임시로 다른 API 사용
+            } catch (e) { console.log('Policy terms cache not loaded'); }
+        }
+
+        async function showTermDetail(article, title, content, formula) {
+            document.getElementById('termModal').classList.add('show');
+            document.getElementById('termModalTitle').textContent = `${article} ${title}`;
+
+            // 약관 전체 내용 표시 (DB에서 가져온 상세 내용)
+            document.getElementById('termModalBody').innerHTML = `
+                <div class="term-article-box">
+                    <div class="term-article-number">${article}</div>
+                    <div class="term-article-title">${title}</div>
+                    <div class="term-article-content">${content}</div>
+                    ${formula ? `
+                        <div class="term-calculation-box">
+                            <h4><i class="ri-calculator-line"></i> 계산 공식</h4>
+                            <code>${formula}</code>
+                        </div>
+                    ` : ''}
+                </div>
+                <div style="background:#fef3c7;padding:15px;border-radius:8px;margin-top:15px;">
+                    <div style="font-weight:600;color:#b45309;margin-bottom:8px;"><i class="ri-information-line"></i> 심사자 참고사항</div>
+                    <ul style="font-size:0.9em;color:#92400e;padding-left:20px;line-height:1.6;">
+                        <li>본 조항은 보험금 산출의 법적 근거가 됩니다.</li>
+                        <li>고객 문의 시 해당 조항을 안내해 주세요.</li>
+                        <li>특약 사항이 있는 경우 추가 검토가 필요합니다.</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+        function closeTermModal() {
+            document.getElementById('termModal').classList.remove('show');
+        }
+
+        // ====== 팩터 계산 기능 ======
+        function generateFactorData(claim, coverages, payoutBreakdown) {
+            const totalClaimed = Number(claim.total_claimed_amount) || 0;
+            const totalApproved = Number(claim.total_approved_amount) || 0;
+            const hospitalizationDays = Number(claim.hospitalization_days) || 0;
+            const hasSurgery = !!claim.surgery_code;
+
+            // 청구 유형에 따른 팩터 계산
+            const isRealLoss = coverages.some(c => c.coverage_category === 'REAL_LOSS');
+            const steps = [];
+
+            // Step 1: 기본 청구금액
+            steps.push({
+                title: '① 기본 청구금액',
+                amount: totalClaimed,
+                factors: [
+                    { name: '총 의료비', value: totalClaimed, type: 'amount', effect: 'neutral' }
+                ],
+                formula: `총 청구금액 = ₩${totalClaimed.toLocaleString()}`
+            });
+
+            // Step 2: 실손보험 팩터 적용 (있는 경우)
+            if (isRealLoss) {
+                const insuredExpense = Number(claim.insured_expense) || Math.round(totalClaimed * 0.7);
+                const uninsuredExpense = Number(claim.uninsured_expense) || Math.round(totalClaimed * 0.3);
+                const payoutRate = 0.8;
+                const deductibleMin = 20000;
+                const deductible = Math.max(deductibleMin, Math.round(insuredExpense * 0.2));
+                const realLossAmount = Math.round((insuredExpense - deductible) * payoutRate + uninsuredExpense * 0.5);
+
+                steps.push({
+                    title: '② 실손보험 팩터 적용',
+                    amount: realLossAmount,
+                    factors: [
+                        { name: '급여 항목', value: insuredExpense, type: 'amount', effect: 'neutral', result: insuredExpense },
+                        { name: '본인부담률', value: 0.2, type: 'rate', effect: 'decrease', result: insuredExpense - deductible },
+                        { name: '지급률', value: payoutRate, type: 'rate', effect: 'decrease', result: Math.round((insuredExpense - deductible) * payoutRate) },
+                        { name: '비급여 항목', value: uninsuredExpense, type: 'amount', effect: 'neutral' },
+                        { name: '비급여 지급률', value: 0.5, type: 'rate', effect: 'decrease', result: Math.round(uninsuredExpense * 0.5) },
+                    ],
+                    formula: `실손 = (급여 ${insuredExpense.toLocaleString()} - 본인부담 ${deductible.toLocaleString()}) × 80% + 비급여 ${uninsuredExpense.toLocaleString()} × 50%`
+                });
+            }
+
+            // Step 3: 정액보험 팩터 적용 (입원일당)
+            if (hospitalizationDays > 0) {
+                const dailyAmount = 50000;
+                const maxDays = 180;
+                const applicableDays = Math.min(hospitalizationDays, maxDays);
+                const hospitalAmount = dailyAmount * applicableDays;
+
+                steps.push({
+                    title: '③ 입원일당 팩터 적용',
+                    amount: hospitalAmount,
+                    factors: [
+                        { name: '입원일당 기본금', value: dailyAmount, type: 'amount', effect: 'neutral' },
+                        { name: '입원일수', value: applicableDays, type: 'multiplier', effect: 'increase', result: hospitalAmount },
+                        { name: '최대 적용일수', value: maxDays, type: 'amount', effect: 'neutral' },
+                    ],
+                    formula: `입원일당 = ₩${dailyAmount.toLocaleString()} × ${applicableDays}일 = ₩${hospitalAmount.toLocaleString()}`
+                });
+            }
+
+            // Step 4: 수술비 팩터 적용
+            if (hasSurgery) {
+                const surgeryBase = 100000;
+                const surgeryType = '2종'; // 시뮬레이션용
+                const surgeryMultiplier = defaultFactors.fixedAmount.surgeryMultiplier[surgeryType] || 20;
+                const surgeryAmount = surgeryBase * surgeryMultiplier;
+
+                steps.push({
+                    title: '④ 수술비 팩터 적용',
+                    amount: surgeryAmount,
+                    factors: [
+                        { name: '수술 기본금액', value: surgeryBase, type: 'amount', effect: 'neutral' },
+                        { name: `수술등급 (${surgeryType})`, value: surgeryMultiplier, type: 'multiplier', effect: 'increase', result: surgeryAmount },
+                    ],
+                    formula: `수술비 = ₩${surgeryBase.toLocaleString()} × ${surgeryMultiplier}배 (${surgeryType}) = ₩${surgeryAmount.toLocaleString()}`
+                });
+            }
+
+            // Step 5: 가입자 조건 팩터
+            const subscriberFactor = 1.0; // 기본값 (나이, 직업 등에 따라 조정 가능)
+            let adjustedAmount = totalApproved;
+
+            if (subscriberFactor !== 1.0) {
+                adjustedAmount = Math.round(totalApproved * subscriberFactor);
+                steps.push({
+                    title: '⑤ 가입자 조건 팩터',
+                    amount: adjustedAmount,
+                    factors: [
+                        { name: '나이 팩터', value: 1.0, type: 'multiplier', effect: 'neutral' },
+                        { name: '직업 팩터', value: 1.0, type: 'multiplier', effect: 'neutral' },
+                        { name: '건강상태 팩터', value: 1.0, type: 'multiplier', effect: 'neutral' },
+                    ],
+                    formula: `조정 후 = ₩${totalApproved.toLocaleString()} × ${subscriberFactor} = ₩${adjustedAmount.toLocaleString()}`
+                });
+            }
+
+            // Step 6: 감액/면책 팩터
+            const validation = claim.validation || {};
+            const reductionFactor = validation.reduction_period?.is_in_period ? 0.5 : 1.0;
+            const finalAfterReduction = Math.round(totalApproved * reductionFactor);
+
+            if (reductionFactor !== 1.0) {
+                steps.push({
+                    title: '⑥ 감액기간 팩터 적용',
+                    amount: finalAfterReduction,
+                    factors: [
+                        { name: '감액기간 팩터', value: reductionFactor, type: 'rate', effect: 'decrease', result: finalAfterReduction },
+                    ],
+                    formula: `감액 적용 = ₩${totalApproved.toLocaleString()} × ${(reductionFactor * 100).toFixed(0)}% = ₩${finalAfterReduction.toLocaleString()}`
+                });
+            }
+
+            // 최종 금액
+            const finalAmount = reductionFactor !== 1.0 ? finalAfterReduction : totalApproved;
+
+            return {
+                steps,
+                finalAmount,
+                appliedFactors: {
+                    realLoss: isRealLoss ? defaultFactors.realLoss : null,
+                    fixedAmount: defaultFactors.fixedAmount,
+                    subscriber: defaultFactors.subscriber,
+                    contract: { ...defaultFactors.contract, reductionPeriodFactor: reductionFactor },
+                }
+            };
+        }
+
+        // ====== 팩터 조정 모달 ======
+        function showFactorModal() {
+            if (!currentClaimData || !currentFactors) return;
+
+            document.getElementById('factorModal').classList.add('show');
+
+            const claim = currentClaimData;
+            const totalClaimed = Number(claim.total_claimed_amount) || 0;
+            const totalApproved = Number(claim.total_approved_amount) || 0;
+
+            document.getElementById('factorModalBody').innerHTML = `
+                <div style="background:#eff6ff;padding:15px;border-radius:8px;margin-bottom:20px;">
+                    <div style="font-weight:600;color:var(--accent-blue);margin-bottom:5px;">
+                        <i class="ri-information-line"></i> 팩터 조정 안내
+                    </div>
+                    <div style="font-size:0.9em;color:var(--text-secondary);">
+                        보험금 산정에 사용되는 팩터를 조정할 수 있습니다. 변경된 팩터는 실시간으로 예상 금액에 반영됩니다.
+                    </div>
+                </div>
+
+                <!-- 실손보험 팩터 -->
+                <div class="factor-edit-group">
+                    <div class="factor-edit-title"><i class="ri-heart-pulse-line"></i> 실손보험 팩터</div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">본인부담률 (%)</div>
+                        <input type="number" class="factor-edit-input" id="factor_deductible" value="20" min="0" max="100" step="5" onchange="recalculateFactorPreview()">
+                        <div class="factor-edit-result" id="result_deductible">-</div>
+                    </div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">지급률 (%)</div>
+                        <input type="number" class="factor-edit-input" id="factor_payout_rate" value="80" min="0" max="100" step="5" onchange="recalculateFactorPreview()">
+                        <div class="factor-edit-result" id="result_payout_rate">-</div>
+                    </div>
+                    <div class="factor-preset-btns">
+                        <button class="factor-preset-btn" onclick="setFactorPreset('realLoss', 'standard')">표준형 (20%/80%)</button>
+                        <button class="factor-preset-btn" onclick="setFactorPreset('realLoss', 'premium')">프리미엄 (10%/90%)</button>
+                        <button class="factor-preset-btn" onclick="setFactorPreset('realLoss', 'basic')">기본형 (30%/70%)</button>
+                    </div>
+                </div>
+
+                <!-- 정액보험 팩터 -->
+                <div class="factor-edit-group">
+                    <div class="factor-edit-title"><i class="ri-hospital-line"></i> 정액보험 팩터</div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">입원일당 (원)</div>
+                        <input type="number" class="factor-edit-input" id="factor_daily" value="50000" min="10000" max="500000" step="10000" onchange="recalculateFactorPreview()">
+                        <div class="factor-edit-result" id="result_daily">₩${(50000 * (claim.hospitalization_days || 0)).toLocaleString()}</div>
+                    </div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">수술비 등급배수</div>
+                        <select class="factor-edit-input" id="factor_surgery_grade" onchange="recalculateFactorPreview()" style="font-family:inherit;">
+                            <option value="10">1종 (×10배)</option>
+                            <option value="20" selected>2종 (×20배)</option>
+                            <option value="40">3종 (×40배)</option>
+                            <option value="80">4종 (×80배)</option>
+                        </select>
+                        <div class="factor-edit-result" id="result_surgery">₩${(100000 * 20).toLocaleString()}</div>
+                    </div>
+                </div>
+
+                <!-- 가입자 조건 팩터 -->
+                <div class="factor-edit-group">
+                    <div class="factor-edit-title"><i class="ri-user-settings-line"></i> 가입자 조건 팩터</div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">나이 팩터</div>
+                        <select class="factor-edit-input" id="factor_age" onchange="recalculateFactorPreview()" style="font-family:inherit;">
+                            <option value="0.8">20대 이하 (0.8)</option>
+                            <option value="0.9">30대 (0.9)</option>
+                            <option value="1.0" selected>40대 (1.0)</option>
+                            <option value="1.1">50대 (1.1)</option>
+                            <option value="1.3">60대 이상 (1.3)</option>
+                        </select>
+                        <div class="factor-edit-result" id="result_age">×1.0</div>
+                    </div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">직업 팩터</div>
+                        <select class="factor-edit-input" id="factor_occupation" onchange="recalculateFactorPreview()" style="font-family:inherit;">
+                            <option value="1.0" selected>사무직 (1.0)</option>
+                            <option value="1.1">생산직 (1.1)</option>
+                            <option value="1.3">위험직종 (1.3)</option>
+                            <option value="1.5">초위험직종 (1.5)</option>
+                        </select>
+                        <div class="factor-edit-result" id="result_occupation">×1.0</div>
+                    </div>
+                </div>
+
+                <!-- 계약 상태 팩터 -->
+                <div class="factor-edit-group">
+                    <div class="factor-edit-title"><i class="ri-file-shield-2-line"></i> 계약 상태 팩터</div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">감액기간 팩터</div>
+                        <select class="factor-edit-input" id="factor_reduction" onchange="recalculateFactorPreview()" style="font-family:inherit;">
+                            <option value="1.0" selected>정상 (100%)</option>
+                            <option value="0.5">감액기간 (50%)</option>
+                            <option value="0">면책기간 (0%)</option>
+                        </select>
+                        <div class="factor-edit-result" id="result_reduction">×1.0</div>
+                    </div>
+                    <div class="factor-edit-row">
+                        <div class="factor-edit-label">무사고 할인 팩터</div>
+                        <select class="factor-edit-input" id="factor_bonus" onchange="recalculateFactorPreview()" style="font-family:inherit;">
+                            <option value="1.0">없음 (1.0)</option>
+                            <option value="1.05" selected>1년 무사고 (1.05)</option>
+                            <option value="1.1">3년 무사고 (1.1)</option>
+                            <option value="1.15">5년 무사고 (1.15)</option>
+                        </select>
+                        <div class="factor-edit-result" id="result_bonus">×1.05</div>
+                    </div>
+                </div>
+
+                <div class="edit-form-group" style="margin-top:20px;">
+                    <label><i class="ri-edit-2-line"></i> 팩터 조정 사유 (필수)</label>
+                    <textarea id="factorReason" rows="2" placeholder="팩터 조정 사유를 입력하세요. 예: 특약 조건에 따른 지급률 상향, 감액기간 해제 등"></textarea>
+                </div>
+            `;
+
+            recalculateFactorPreview();
+        }
+
+        function setFactorPreset(type, preset) {
+            if (type === 'realLoss') {
+                const presets = {
+                    standard: { deductible: 20, payout: 80 },
+                    premium: { deductible: 10, payout: 90 },
+                    basic: { deductible: 30, payout: 70 }
+                };
+                document.getElementById('factor_deductible').value = presets[preset].deductible;
+                document.getElementById('factor_payout_rate').value = presets[preset].payout;
+                recalculateFactorPreview();
+            }
+        }
+
+        function recalculateFactorPreview() {
+            if (!currentClaimData) return;
+
+            const claim = currentClaimData;
+            const totalClaimed = Number(claim.total_claimed_amount) || 0;
+            const hospitalizationDays = Number(claim.hospitalization_days) || 0;
+            const hasSurgery = !!claim.surgery_code;
+
+            // 팩터 값 읽기
+            const deductibleRate = (Number(document.getElementById('factor_deductible')?.value) || 20) / 100;
+            const payoutRate = (Number(document.getElementById('factor_payout_rate')?.value) || 80) / 100;
+            const dailyAmount = Number(document.getElementById('factor_daily')?.value) || 50000;
+            const surgeryMultiplier = Number(document.getElementById('factor_surgery_grade')?.value) || 20;
+            const ageFactor = Number(document.getElementById('factor_age')?.value) || 1.0;
+            const occupationFactor = Number(document.getElementById('factor_occupation')?.value) || 1.0;
+            const reductionFactor = Number(document.getElementById('factor_reduction')?.value) || 1.0;
+            const bonusFactor = Number(document.getElementById('factor_bonus')?.value) || 1.0;
+
+            // 실손보험 계산
+            const insuredExpense = Number(claim.insured_expense) || Math.round(totalClaimed * 0.7);
+            const uninsuredExpense = Number(claim.uninsured_expense) || Math.round(totalClaimed * 0.3);
+            const deductible = Math.max(20000, Math.round(insuredExpense * deductibleRate));
+            const realLossAmount = Math.round((insuredExpense - deductible) * payoutRate + uninsuredExpense * 0.5);
+
+            // 정액보험 계산
+            const hospitalAmount = dailyAmount * hospitalizationDays;
+            const surgeryAmount = hasSurgery ? 100000 * surgeryMultiplier : 0;
+
+            // 최종 계산
+            let total = realLossAmount + hospitalAmount + surgeryAmount;
+            total = Math.round(total * ageFactor * occupationFactor * reductionFactor * bonusFactor);
+
+            // UI 업데이트
+            document.getElementById('result_daily').textContent = `₩${hospitalAmount.toLocaleString()}`;
+            document.getElementById('result_surgery').textContent = `₩${surgeryAmount.toLocaleString()}`;
+            document.getElementById('result_age').textContent = `×${ageFactor}`;
+            document.getElementById('result_occupation').textContent = `×${occupationFactor}`;
+            document.getElementById('result_reduction').textContent = `×${reductionFactor}`;
+            document.getElementById('result_bonus').textContent = `×${bonusFactor}`;
+
+            document.getElementById('factorTotalPreview').textContent = `₩${total.toLocaleString()}`;
+        }
+
+        function closeFactorModal() {
+            document.getElementById('factorModal').classList.remove('show');
+        }
+
+        async function applyFactorAdjustments() {
+            if (!currentClaimData || !selectedClaimId) return;
+
+            const reason = document.getElementById('factorReason')?.value?.trim();
+            if (!reason) {
+                showToast('팩터 조정 사유를 입력해주세요.', 'error');
+                return;
+            }
+
+            const totalPreview = document.getElementById('factorTotalPreview')?.textContent || '₩0';
+            const totalAmount = parseInt(totalPreview.replace(/[₩,]/g, '')) || 0;
+
+            // 적용된 팩터 정보 수집
+            const appliedFactors = {
+                deductibleRate: (Number(document.getElementById('factor_deductible')?.value) || 20) + '%',
+                payoutRate: (Number(document.getElementById('factor_payout_rate')?.value) || 80) + '%',
+                dailyAmount: Number(document.getElementById('factor_daily')?.value) || 50000,
+                surgeryGrade: document.getElementById('factor_surgery_grade')?.selectedOptions[0]?.text || '2종',
+                ageFactor: document.getElementById('factor_age')?.value || '1.0',
+                occupationFactor: document.getElementById('factor_occupation')?.value || '1.0',
+                reductionFactor: document.getElementById('factor_reduction')?.value || '1.0',
+                bonusFactor: document.getElementById('factor_bonus')?.value || '1.0',
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/claims/${selectedClaimId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reviewer_name: '김심사',
+                        notes: `[팩터 조정] ${reason}\n\n적용 팩터:\n• 본인부담률: ${appliedFactors.deductibleRate}\n• 지급률: ${appliedFactors.payoutRate}\n• 입원일당: ₩${appliedFactors.dailyAmount.toLocaleString()}\n• 수술등급: ${appliedFactors.surgeryGrade}\n• 나이팩터: ${appliedFactors.ageFactor}\n• 직업팩터: ${appliedFactors.occupationFactor}\n• 감액팩터: ${appliedFactors.reductionFactor}\n• 무사고: ${appliedFactors.bonusFactor}`,
+                        approved_amount: totalAmount
+                    })
+                });
+
+                if (!res.ok) throw new Error('저장 실패');
+
+                showToast(`팩터가 적용되었습니다. (₩${totalAmount.toLocaleString()})`);
+                closeFactorModal();
+                closeModal();
+                await loadData();
+            } catch (e) {
+                showToast('저장 실패: ' + e.message, 'error');
+            }
+        }
+
+        // ====== 금액 수정 기능 ======
+        function showEditModal() {
+            if (!currentClaimData) return;
+
+            const breakdown = currentClaimData.payout_breakdown || [];
+            editingBreakdown = JSON.parse(JSON.stringify(breakdown)); // 깊은 복사
+
+            document.getElementById('editModal').classList.add('show');
+            document.getElementById('editModalBody').innerHTML = `
+                <div style="background:#eff6ff;padding:15px;border-radius:8px;margin-bottom:20px;">
+                    <div style="font-weight:600;color:var(--accent-blue);margin-bottom:5px;">
+                        <i class="ri-information-line"></i> AI 산출 결과 수정
+                    </div>
+                    <div style="font-size:0.9em;color:var(--text-secondary);">
+                        AI가 산출한 금액을 심사자가 직접 수정할 수 있습니다. 수정 사유를 반드시 입력해주세요.
+                    </div>
+                </div>
+                <div class="edit-breakdown-list">
+                    ${breakdown.map((item, idx) => `
+                        <div class="edit-breakdown-item">
+                            <div class="edit-breakdown-item-header">
+                                <span>${item.item}</span>
+                                <span class="original">원래 금액: ₩${Number(item.approvedAmount).toLocaleString()}</span>
+                            </div>
+                            <div class="edit-amount-row">
+                                <div class="edit-form-group" style="margin-bottom:0;">
+                                    <label>승인금액</label>
+                                    <input type="number" id="edit_approved_${idx}" value="${item.approvedAmount}" onchange="updateEditTotal()">
+                                </div>
+                                <div class="edit-form-group" style="margin-bottom:0;">
+                                    <label>청구금액</label>
+                                    <input type="number" value="${item.claimedAmount}" disabled style="background:#f1f5f9;">
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="edit-form-group" style="margin-top:20px;">
+                    <label><i class="ri-edit-2-line"></i> 수정 사유 (필수)</label>
+                    <textarea id="editReason" rows="3" placeholder="금액 수정 사유를 입력하세요. 예: 중복 청구 확인됨, 의료비 영수증 불일치 등"></textarea>
+                </div>
+                <div style="background:var(--bg-primary);padding:15px;border-radius:8px;margin-top:15px;">
+                    <div style="display:flex;justify-content:space-between;font-weight:600;">
+                        <span>수정 후 총 승인금액</span>
+                        <span id="editTotalAmount" style="color:var(--accent-green);font-family:'Roboto Mono',monospace;">₩${breakdown.reduce((sum, item) => sum + Number(item.approvedAmount), 0).toLocaleString()}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateEditTotal() {
+            if (!currentClaimData) return;
+            const breakdown = currentClaimData.payout_breakdown || [];
+            let total = 0;
+            breakdown.forEach((item, idx) => {
+                const input = document.getElementById(`edit_approved_${idx}`);
+                if (input) total += Number(input.value) || 0;
+            });
+            document.getElementById('editTotalAmount').textContent = `₩${total.toLocaleString()}`;
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('show');
+        }
+
+        async function saveEditedAmounts() {
+            if (!currentClaimData || !selectedClaimId) return;
+
+            const reason = document.getElementById('editReason')?.value?.trim();
+            if (!reason) {
+                showToast('수정 사유를 입력해주세요.', 'error');
+                return;
+            }
+
+            const breakdown = currentClaimData.payout_breakdown || [];
+            let totalApproved = 0;
+            const editedItems = [];
+
+            breakdown.forEach((item, idx) => {
+                const newAmount = Number(document.getElementById(`edit_approved_${idx}`)?.value) || 0;
+                totalApproved += newAmount;
+                editedItems.push({
+                    item: item.item,
+                    originalAmount: item.approvedAmount,
+                    editedAmount: newAmount,
+                    changed: item.approvedAmount !== newAmount
+                });
+            });
+
+            try {
+                // 청구 금액 직접 업데이트
+                const res = await fetch(`${API_BASE}/claims/${selectedClaimId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reviewer_name: '김심사',
+                        notes: `[금액 수정] ${reason}\n\n변경 내역:\n${editedItems.filter(e => e.changed).map(e => `• ${e.item}: ₩${e.originalAmount.toLocaleString()} → ₩${e.editedAmount.toLocaleString()}`).join('\n')}`,
+                        approved_amount: totalApproved
+                    })
+                });
+
+                if (!res.ok) throw new Error('저장 실패');
+
+                showToast(`금액이 수정되었습니다. (₩${totalApproved.toLocaleString()})`);
+                closeEditModal();
+                closeModal();
+                await loadData();
+            } catch (e) {
+                showToast('저장 실패: ' + e.message, 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.querySelector('#toast i');
+            document.getElementById('toastMessage').textContent = message;
+            toast.classList.remove('success', 'error');
+            toast.classList.add('show', type);
+            icon.className = type === 'error' ? 'ri-error-warning-line' : 'ri-check-double-line';
+            setTimeout(() => toast.classList.remove('show', type), 4000);
+        }
+    </script>
+</body>
+</html>

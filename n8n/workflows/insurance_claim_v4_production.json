@@ -1,0 +1,210 @@
+{
+  "name": "보험금 청구 자동 심사 시스템 v4 (Production)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "insurance-claim/submit",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook-submit",
+      "name": "청구 접수 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "insurance-claim-submit"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/claims",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || $json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "backend-call",
+      "name": "백엔드 API 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "response-node",
+      "name": "응답 반환",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "insurance-claim/stats",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-stats",
+      "name": "통계 조회 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 500],
+      "webhookId": "insurance-claim-stats"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/claims/stats",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "stats-api-call",
+      "name": "통계 API 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [470, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "stats-response",
+      "name": "통계 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "insurance-claim/list",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-list",
+      "name": "청구목록 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 700],
+      "webhookId": "insurance-claim-list"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3000/api/claims?page={{ $json.query.page || 1 }}&limit={{ $json.query.limit || 20 }}&status={{ $json.query.status || '' }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "list-api-call",
+      "name": "목록 API 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [470, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "list-response",
+      "name": "목록 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "insurance-claim/:id/approve",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-approve",
+      "name": "승인 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 900],
+      "webhookId": "insurance-claim-approve"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:3000/api/claims/{{ $json.params.id }}/approve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "approve-api-call",
+      "name": "승인 API 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [470, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "approve-response",
+      "name": "승인 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 900]
+    }
+  ],
+  "connections": {
+    "청구 접수 Webhook": {
+      "main": [[{ "node": "백엔드 API 호출", "type": "main", "index": 0 }]]
+    },
+    "백엔드 API 호출": {
+      "main": [[{ "node": "응답 반환", "type": "main", "index": 0 }]]
+    },
+    "통계 조회 Webhook": {
+      "main": [[{ "node": "통계 API 호출", "type": "main", "index": 0 }]]
+    },
+    "통계 API 호출": {
+      "main": [[{ "node": "통계 응답", "type": "main", "index": 0 }]]
+    },
+    "청구목록 Webhook": {
+      "main": [[{ "node": "목록 API 호출", "type": "main", "index": 0 }]]
+    },
+    "목록 API 호출": {
+      "main": [[{ "node": "목록 응답", "type": "main", "index": 0 }]]
+    },
+    "승인 Webhook": {
+      "main": [[{ "node": "승인 API 호출", "type": "main", "index": 0 }]]
+    },
+    "승인 API 호출": {
+      "main": [[{ "node": "승인 응답", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

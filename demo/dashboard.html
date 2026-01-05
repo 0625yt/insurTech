@@ -1,0 +1,1677 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 보험심사 플랫폼 - InsurTech</title>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #252540;
+            --bg-hover: #2d2d4a;
+            --accent-blue: #00d4ff;
+            --accent-purple: #7b2cbf;
+            --accent-green: #00ff88;
+            --accent-orange: #ff9f43;
+            --accent-red: #ff6b6b;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #6b6b80;
+            --border-color: rgba(255,255,255,0.08);
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Layout */
+        .app-container {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo {
+            padding: 0 25px 30px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        .logo h1 {
+            font-size: 1.4em;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo span {
+            font-size: 0.7em;
+            background: var(--accent-purple);
+            -webkit-background-clip: unset;
+            -webkit-text-fill-color: unset;
+            padding: 3px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .nav-section {
+            padding: 0 15px;
+            margin-bottom: 25px;
+        }
+
+        .nav-section-title {
+            font-size: 0.75em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0 10px;
+            margin-bottom: 10px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(123,44,191,0.15));
+            color: var(--accent-blue);
+            border: 1px solid rgba(0,212,255,0.3);
+        }
+
+        .nav-item i {
+            font-size: 1.2em;
+            width: 24px;
+        }
+
+        .nav-item .badge {
+            margin-left: auto;
+            background: var(--accent-red);
+            color: white;
+            font-size: 0.75em;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+
+        .user-details .name {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .user-details .role {
+            font-size: 0.8em;
+            color: var(--text-muted);
+        }
+
+        /* Main Content */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .header-left h2 {
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        .header-left p {
+            color: var(--text-muted);
+            font-size: 0.9em;
+            margin-top: 4px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--bg-card);
+            border-radius: 10px;
+            padding: 10px 15px;
+            gap: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .search-box input {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            outline: none;
+            width: 200px;
+        }
+
+        .search-box i {
+            color: var(--text-muted);
+        }
+
+        .icon-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .icon-btn .dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-red);
+            border-radius: 50%;
+        }
+
+        /* Dashboard Content */
+        .dashboard {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px 30px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 22px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(0,212,255,0.3);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4em;
+        }
+
+        .stat-icon.blue { background: rgba(0,212,255,0.15); color: var(--accent-blue); }
+        .stat-icon.green { background: rgba(0,255,136,0.15); color: var(--accent-green); }
+        .stat-icon.orange { background: rgba(255,159,67,0.15); color: var(--accent-orange); }
+        .stat-icon.purple { background: rgba(123,44,191,0.15); color: var(--accent-purple); }
+
+        .stat-trend {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-trend.up { background: rgba(0,255,136,0.15); color: var(--accent-green); }
+        .stat-trend.down { background: rgba(255,107,107,0.15); color: var(--accent-red); }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9em;
+        }
+
+        /* Content Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 25px;
+        }
+
+        /* Claims Table */
+        .claims-section {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title i {
+            color: var(--accent-blue);
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 5px;
+            background: var(--bg-secondary);
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .filter-tab:hover {
+            color: var(--text-primary);
+        }
+
+        .filter-tab.active {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .claims-table {
+            width: 100%;
+        }
+
+        .claims-table th {
+            text-align: left;
+            padding: 15px 20px;
+            font-size: 0.8em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 500;
+        }
+
+        .claims-table td {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        .claims-table tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .claims-table tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .claims-table tr.selected {
+            background: rgba(0,212,255,0.1);
+        }
+
+        .claim-id {
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+
+        .customer-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .customer-avatar {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #4a4a6a, #3a3a5a);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .customer-name {
+            font-weight: 500;
+        }
+
+        .customer-policy {
+            font-size: 0.8em;
+            color: var(--text-muted);
+        }
+
+        .claim-type-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+
+        .claim-type-badge.hospitalization {
+            background: rgba(0,212,255,0.15);
+            color: var(--accent-blue);
+        }
+
+        .claim-type-badge.surgery {
+            background: rgba(123,44,191,0.15);
+            color: var(--accent-purple);
+        }
+
+        .claim-type-badge.outpatient {
+            background: rgba(0,255,136,0.15);
+            color: var(--accent-green);
+        }
+
+        .amount {
+            font-weight: 600;
+        }
+
+        .ai-score {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .score-bar {
+            width: 60px;
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s;
+        }
+
+        .score-fill.high { background: var(--accent-green); }
+        .score-fill.medium { background: var(--accent-orange); }
+        .score-fill.low { background: var(--accent-red); }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-badge.pending {
+            background: rgba(255,159,67,0.15);
+            color: var(--accent-orange);
+        }
+
+        .status-badge.ai-review {
+            background: rgba(123,44,191,0.15);
+            color: var(--accent-purple);
+        }
+
+        .status-badge.approved {
+            background: rgba(0,255,136,0.15);
+            color: var(--accent-green);
+        }
+
+        .status-badge.rejected {
+            background: rgba(255,107,107,0.15);
+            color: var(--accent-red);
+        }
+
+        .status-badge i {
+            font-size: 0.9em;
+        }
+
+        /* Right Sidebar - Claim Detail */
+        .detail-panel {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .detail-title {
+            font-weight: 600;
+        }
+
+        .detail-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .detail-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .detail-section {
+            margin-bottom: 25px;
+        }
+
+        .detail-section-title {
+            font-size: 0.8em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .customer-profile {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+        }
+
+        .customer-profile .avatar {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .customer-profile .info h4 {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .customer-profile .info p {
+            font-size: 0.85em;
+            color: var(--text-muted);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .info-item {
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: 10px;
+        }
+
+        .info-item .label {
+            font-size: 0.75em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .info-item .value {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .ai-analysis {
+            background: linear-gradient(135deg, rgba(123,44,191,0.1), rgba(0,212,255,0.1));
+            border: 1px solid rgba(123,44,191,0.3);
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .ai-analysis-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .ai-analysis-header i {
+            color: var(--accent-purple);
+            font-size: 1.2em;
+        }
+
+        .ai-analysis-header span {
+            font-weight: 600;
+        }
+
+        .ai-confidence {
+            margin-bottom: 15px;
+        }
+
+        .ai-confidence-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+        }
+
+        .ai-confidence-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .ai-confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));
+            border-radius: 4px;
+            transition: width 1s;
+        }
+
+        .ai-models-used {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .model-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            font-size: 0.8em;
+        }
+
+        .model-badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .model-badge.gpt .dot { background: #74aa9c; }
+        .model-badge.claude .dot { background: #d97757; }
+        .model-badge.gemini .dot { background: #4285f4; }
+
+        .ai-recommendation {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(0,255,136,0.1);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .ai-recommendation .title {
+            font-size: 0.8em;
+            color: var(--accent-green);
+            margin-bottom: 5px;
+        }
+
+        .ai-recommendation .text {
+            font-size: 0.9em;
+        }
+
+        .ocr-preview {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .ocr-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .ocr-item:last-child {
+            border-bottom: none;
+        }
+
+        .ocr-item .key {
+            color: var(--text-muted);
+            font-size: 0.9em;
+        }
+
+        .ocr-item .value {
+            font-weight: 500;
+        }
+
+        .payout-summary {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .payout-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .payout-row:last-child {
+            border-bottom: none;
+        }
+
+        .payout-row .name {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        .payout-row .amount {
+            color: var(--accent-blue);
+        }
+
+        .payout-row.total {
+            padding-top: 15px;
+            margin-top: 5px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .payout-row.total .name {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .payout-row.total .amount {
+            font-size: 1.2em;
+            color: var(--accent-green);
+        }
+
+        /* Action Buttons */
+        .detail-footer {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+        }
+
+        .btn-approve {
+            background: linear-gradient(135deg, var(--accent-green), #00cc70);
+            color: white;
+        }
+
+        .btn-approve:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,255,136,0.3);
+        }
+
+        .btn-reject {
+            background: var(--bg-secondary);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .btn-reject:hover {
+            background: rgba(255,107,107,0.1);
+        }
+
+        .btn-review {
+            background: var(--bg-secondary);
+            color: var(--accent-orange);
+            border: 1px solid var(--accent-orange);
+        }
+
+        /* Activity Feed */
+        .activity-section {
+            margin-top: 25px;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 15px;
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .activity-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.ai { background: rgba(123,44,191,0.15); color: var(--accent-purple); }
+        .activity-icon.user { background: rgba(0,212,255,0.15); color: var(--accent-blue); }
+        .activity-icon.system { background: rgba(255,159,67,0.15); color: var(--accent-orange); }
+
+        .activity-content .title {
+            font-weight: 500;
+            margin-bottom: 3px;
+        }
+
+        .activity-content .time {
+            font-size: 0.8em;
+            color: var(--text-muted);
+        }
+
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-badge.ai-review i {
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-hover);
+            border-radius: 3px;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            border-color: var(--accent-green);
+        }
+
+        .toast.success i {
+            color: var(--accent-green);
+            font-size: 1.3em;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 20px;
+            width: 500px;
+            max-width: 90%;
+            border: 1px solid var(--border-color);
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.show .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 25px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-body {
+            padding: 25px;
+        }
+
+        .modal-footer {
+            padding: 20px 25px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .modal-btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .modal-btn.cancel {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        .modal-btn.confirm {
+            background: linear-gradient(135deg, var(--accent-green), #00cc70);
+            color: white;
+        }
+
+        .approval-summary {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .approval-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .approval-row:last-child {
+            border-bottom: none;
+            padding-top: 15px;
+            margin-top: 5px;
+            border-top: 2px solid var(--accent-green);
+        }
+
+        .approval-row .label {
+            color: var(--text-muted);
+        }
+
+        .approval-row .value {
+            font-weight: 600;
+        }
+
+        .approval-row:last-child .value {
+            color: var(--accent-green);
+            font-size: 1.3em;
+        }
+
+        textarea {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            color: var(--text-primary);
+            resize: none;
+            margin-top: 15px;
+            font-family: inherit;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1><i class="ri-shield-check-line"></i> InsurTech <span>AI</span></h1>
+            </div>
+
+            <nav class="nav-section">
+                <div class="nav-section-title">메인</div>
+                <div class="nav-item active">
+                    <i class="ri-dashboard-line"></i>
+                    대시보드
+                </div>
+                <div class="nav-item">
+                    <i class="ri-file-list-3-line"></i>
+                    청구 목록
+                    <span class="badge">12</span>
+                </div>
+                <div class="nav-item">
+                    <i class="ri-robot-line"></i>
+                    AI 심사
+                    <span class="badge">5</span>
+                </div>
+            </nav>
+
+            <nav class="nav-section">
+                <div class="nav-section-title">관리</div>
+                <div class="nav-item">
+                    <i class="ri-user-line"></i>
+                    고객 관리
+                </div>
+                <div class="nav-item">
+                    <i class="ri-file-shield-2-line"></i>
+                    증권 관리
+                </div>
+                <div class="nav-item">
+                    <i class="ri-bar-chart-box-line"></i>
+                    통계/리포트
+                </div>
+            </nav>
+
+            <nav class="nav-section">
+                <div class="nav-section-title">시스템</div>
+                <div class="nav-item">
+                    <i class="ri-settings-3-line"></i>
+                    설정
+                </div>
+                <div class="nav-item">
+                    <i class="ri-question-line"></i>
+                    도움말
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">김</div>
+                    <div class="user-details">
+                        <div class="name">김심사</div>
+                        <div class="role">심사팀 선임</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <h2>AI 심사 대시보드</h2>
+                    <p>오늘의 청구 현황을 확인하세요</p>
+                </div>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <i class="ri-search-line"></i>
+                        <input type="text" placeholder="청구번호, 고객명 검색...">
+                    </div>
+                    <button class="icon-btn">
+                        <i class="ri-notification-3-line"></i>
+                        <span class="dot"></span>
+                    </button>
+                    <button class="icon-btn">
+                        <i class="ri-settings-3-line"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="dashboard">
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon blue">
+                                <i class="ri-file-list-3-line"></i>
+                            </div>
+                            <span class="stat-trend up">
+                                <i class="ri-arrow-up-line"></i> 12%
+                            </span>
+                        </div>
+                        <div class="stat-value">128</div>
+                        <div class="stat-label">오늘 접수된 청구</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon purple">
+                                <i class="ri-robot-line"></i>
+                            </div>
+                            <span class="stat-trend up">
+                                <i class="ri-arrow-up-line"></i> 8%
+                            </span>
+                        </div>
+                        <div class="stat-value">94%</div>
+                        <div class="stat-label">AI 자동 처리율</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon green">
+                                <i class="ri-check-double-line"></i>
+                            </div>
+                            <span class="stat-trend up">
+                                <i class="ri-arrow-up-line"></i> 5%
+                            </span>
+                        </div>
+                        <div class="stat-value">₩2.4억</div>
+                        <div class="stat-label">오늘 지급 승인액</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon orange">
+                                <i class="ri-time-line"></i>
+                            </div>
+                            <span class="stat-trend down">
+                                <i class="ri-arrow-down-line"></i> 23%
+                            </span>
+                        </div>
+                        <div class="stat-value">2.3분</div>
+                        <div class="stat-label">평균 처리 시간</div>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div class="content-grid">
+                    <!-- Claims Table -->
+                    <div class="claims-section">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <i class="ri-file-list-3-line"></i>
+                                청구 대기열
+                            </div>
+                            <div class="filter-tabs">
+                                <div class="filter-tab active">전체</div>
+                                <div class="filter-tab">AI 심사중</div>
+                                <div class="filter-tab">검토 필요</div>
+                                <div class="filter-tab">완료</div>
+                            </div>
+                        </div>
+
+                        <table class="claims-table">
+                            <thead>
+                                <tr>
+                                    <th>청구번호</th>
+                                    <th>고객</th>
+                                    <th>유형</th>
+                                    <th>청구액</th>
+                                    <th>AI 신뢰도</th>
+                                    <th>상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="claimsTableBody">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Claim Detail Panel -->
+                    <div class="detail-panel" id="detailPanel">
+                        <div class="detail-header">
+                            <span class="detail-title">청구 상세 정보</span>
+                            <div class="detail-actions">
+                                <button class="icon-btn" onclick="refreshClaim()">
+                                    <i class="ri-refresh-line"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="detail-content" id="detailContent">
+                            <div style="text-align: center; padding: 50px 20px; color: var(--text-muted);">
+                                <i class="ri-cursor-line" style="font-size: 3em; margin-bottom: 15px; display: block;"></i>
+                                <p>좌측 목록에서 청구 건을 선택하세요</p>
+                            </div>
+                        </div>
+
+                        <div class="detail-footer" id="detailFooter" style="display: none;">
+                            <button class="btn btn-reject" onclick="showRejectModal()">
+                                <i class="ri-close-circle-line"></i> 거절
+                            </button>
+                            <button class="btn btn-review">
+                                <i class="ri-eye-line"></i> 추가검토
+                            </button>
+                            <button class="btn btn-approve" onclick="showApproveModal()">
+                                <i class="ri-check-line"></i> 승인
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Approval Modal -->
+    <div class="modal-overlay" id="approveModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="ri-check-double-line" style="color: var(--accent-green);"></i> 지급 승인 확인</h3>
+                <button class="icon-btn" onclick="closeModal('approveModal')">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="approval-summary" id="approvalSummary">
+                    <!-- Dynamic content -->
+                </div>
+                <textarea placeholder="승인 메모 (선택사항)" rows="3" id="approveNote"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" onclick="closeModal('approveModal')">취소</button>
+                <button class="modal-btn confirm" onclick="confirmApprove()">
+                    <i class="ri-check-line"></i> 최종 승인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <i class="ri-check-double-line"></i>
+        <span id="toastMessage">처리가 완료되었습니다</span>
+    </div>
+
+    <script>
+        const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/insurance-claim/submit';
+
+        // Sample claims data
+        let claimsData = [
+            {
+                id: 'CLM-2024-001',
+                customer: { name: '홍길동', avatar: '홍', policy: 'POL-2024-001' },
+                type: 'hospitalization',
+                typeLabel: '입원',
+                amount: 1520000,
+                aiScore: 94,
+                status: 'ai-review',
+                statusLabel: 'AI 심사중'
+            },
+            {
+                id: 'CLM-2024-002',
+                customer: { name: '김철수', avatar: '김', policy: 'POL-2024-002' },
+                type: 'surgery',
+                typeLabel: '수술',
+                amount: 3500000,
+                aiScore: 87,
+                status: 'pending',
+                statusLabel: '검토 대기'
+            },
+            {
+                id: 'CLM-2024-003',
+                customer: { name: '이영희', avatar: '이', policy: 'POL-2024-003' },
+                type: 'outpatient',
+                typeLabel: '통원',
+                amount: 85000,
+                aiScore: 98,
+                status: 'approved',
+                statusLabel: '승인완료'
+            },
+            {
+                id: 'CLM-2024-004',
+                customer: { name: '박민수', avatar: '박', policy: 'POL-2024-004' },
+                type: 'hospitalization',
+                typeLabel: '입원',
+                amount: 2100000,
+                aiScore: 45,
+                status: 'pending',
+                statusLabel: '검토 필요'
+            },
+            {
+                id: 'CLM-2024-005',
+                customer: { name: '정수진', avatar: '정', policy: 'POL-2024-005' },
+                type: 'surgery',
+                typeLabel: '수술',
+                amount: 5200000,
+                aiScore: 91,
+                status: 'ai-review',
+                statusLabel: 'AI 심사중'
+            }
+        ];
+
+        let selectedClaim = null;
+        let selectedClaimResult = null;
+
+        function renderClaims() {
+            const tbody = document.getElementById('claimsTableBody');
+            tbody.innerHTML = claimsData.map((claim, index) => `
+                <tr onclick="selectClaim(${index})" class="${selectedClaim === index ? 'selected' : ''}">
+                    <td><span class="claim-id">${claim.id}</span></td>
+                    <td>
+                        <div class="customer-cell">
+                            <div class="customer-avatar">${claim.customer.avatar}</div>
+                            <div>
+                                <div class="customer-name">${claim.customer.name}</div>
+                                <div class="customer-policy">${claim.customer.policy}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="claim-type-badge ${claim.type}">${claim.typeLabel}</span></td>
+                    <td class="amount">₩${claim.amount.toLocaleString()}</td>
+                    <td>
+                        <div class="ai-score">
+                            <div class="score-bar">
+                                <div class="score-fill ${claim.aiScore >= 80 ? 'high' : claim.aiScore >= 50 ? 'medium' : 'low'}"
+                                     style="width: ${claim.aiScore}%"></div>
+                            </div>
+                            <span>${claim.aiScore}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="status-badge ${claim.status}">
+                            ${claim.status === 'ai-review' ? '<i class="ri-robot-line"></i>' :
+                              claim.status === 'approved' ? '<i class="ri-check-line"></i>' :
+                              claim.status === 'rejected' ? '<i class="ri-close-line"></i>' :
+                              '<i class="ri-time-line"></i>'}
+                            ${claim.statusLabel}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function selectClaim(index) {
+            selectedClaim = index;
+            renderClaims();
+
+            const claim = claimsData[index];
+
+            // Call n8n webhook to get AI analysis
+            try {
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        policy_id: claim.customer.policy,
+                        customer_name: claim.customer.name,
+                        claim_case_id: claim.id,
+                        claim_type: claim.type,
+                        claim_amount: claim.amount
+                    })
+                });
+
+                const result = await response.json();
+                selectedClaimResult = result;
+                renderClaimDetail(claim, result);
+
+            } catch (error) {
+                console.error('Error calling n8n:', error);
+                renderClaimDetailMock(claim);
+            }
+        }
+
+        function renderClaimDetail(claim, result) {
+            const content = document.getElementById('detailContent');
+            const footer = document.getElementById('detailFooter');
+
+            const ocrSummary = result.ocr_summary || {};
+            const payoutDetails = result.payout_details || {};
+            const reviewResult = result.review_result || {};
+
+            content.innerHTML = `
+                <div class="detail-section">
+                    <div class="detail-section-title">고객 정보</div>
+                    <div class="customer-profile">
+                        <div class="avatar">${claim.customer.avatar}</div>
+                        <div class="info">
+                            <h4>${result.customer?.name || claim.customer.name}</h4>
+                            <p>${claim.customer.policy} · ${result.customer?.birth || '1985-03-15'}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="detail-section-title">AI 분석 결과</div>
+                    <div class="ai-analysis">
+                        <div class="ai-analysis-header">
+                            <i class="ri-robot-line"></i>
+                            <span>Multi-Model OCR 앙상블</span>
+                        </div>
+                        <div class="ai-confidence">
+                            <div class="ai-confidence-header">
+                                <span>신뢰도</span>
+                                <span>${Math.round((ocrSummary.ocr_confidence || 0.94) * 100)}%</span>
+                            </div>
+                            <div class="ai-confidence-bar">
+                                <div class="ai-confidence-fill" style="width: ${(ocrSummary.ocr_confidence || 0.94) * 100}%"></div>
+                            </div>
+                        </div>
+                        <div class="ai-models-used">
+                            ${(ocrSummary.models_used || ['gpt-4o', 'claude-3.5-sonnet', 'gemini-1.5-pro']).map(model => `
+                                <span class="model-badge ${model.includes('gpt') ? 'gpt' : model.includes('claude') ? 'claude' : 'gemini'}">
+                                    <span class="dot"></span>
+                                    ${model}
+                                </span>
+                            `).join('')}
+                        </div>
+                        <div class="ai-recommendation">
+                            <div class="title">AI 추천</div>
+                            <div class="text">${reviewResult.decision || '자동 승인 권고'}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="detail-section-title">OCR 추출 정보</div>
+                    <div class="ocr-preview">
+                        <div class="ocr-item">
+                            <span class="key">진단명</span>
+                            <span class="value">${ocrSummary.diagnosis || '급성충수염 (K35.0)'}</span>
+                        </div>
+                        <div class="ocr-item">
+                            <span class="key">치료 유형</span>
+                            <span class="value">${ocrSummary.treatment || '입원'}</span>
+                        </div>
+                        <div class="ocr-item">
+                            <span class="key">의료기관</span>
+                            <span class="value">${ocrSummary.hospital || '서울대학교병원'}</span>
+                        </div>
+                        <div class="ocr-item">
+                            <span class="key">수술명</span>
+                            <span class="value">${ocrSummary.surgery || '복강경 충수절제술'}</span>
+                        </div>
+                        <div class="ocr-item">
+                            <span class="key">입원일수</span>
+                            <span class="value">${ocrSummary.hospital_days || 4}일</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="detail-section-title">지급 산정 내역</div>
+                    <div class="payout-summary">
+                        ${(payoutDetails.breakdown || [
+                            { item: '질병입원의료비', amount: 46800 },
+                            { item: '질병수술비', amount: 1000000 },
+                            { item: '질병입원일당', amount: 200000 }
+                        ]).map(item => `
+                            <div class="payout-row">
+                                <span class="name">${item.item}</span>
+                                <span class="amount">₩${item.amount.toLocaleString()}</span>
+                            </div>
+                        `).join('')}
+                        <div class="payout-row total">
+                            <span class="name">총 지급 예정액</span>
+                            <span class="amount">₩${(payoutDetails.total_approved || 1246800).toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-section activity-section">
+                    <div class="detail-section-title">처리 이력</div>
+                    <div class="activity-item">
+                        <div class="activity-icon ai">
+                            <i class="ri-robot-line"></i>
+                        </div>
+                        <div class="activity-content">
+                            <div class="title">AI 자동 심사 완료</div>
+                            <div class="time">방금 전 · 처리시간 ${result.metadata?.processing_time_ms || 44}ms</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon system">
+                            <i class="ri-upload-cloud-line"></i>
+                        </div>
+                        <div class="activity-content">
+                            <div class="title">청구 접수</div>
+                            <div class="time">2분 전</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            footer.style.display = 'flex';
+        }
+
+        function renderClaimDetailMock(claim) {
+            // Fallback mock rendering
+            renderClaimDetail(claim, {
+                ocr_summary: {
+                    ocr_confidence: claim.aiScore / 100,
+                    models_used: ['gpt-4o', 'claude-3.5-sonnet', 'gemini-1.5-pro']
+                },
+                payout_details: {
+                    total_approved: Math.round(claim.amount * 0.85),
+                    breakdown: [
+                        { item: '의료비', amount: Math.round(claim.amount * 0.5) },
+                        { item: '기타', amount: Math.round(claim.amount * 0.35) }
+                    ]
+                },
+                review_result: {
+                    decision: claim.aiScore >= 80 ? '자동 승인 권고' : '수동 검토 필요'
+                }
+            });
+        }
+
+        function showApproveModal() {
+            if (!selectedClaimResult) return;
+
+            const summary = document.getElementById('approvalSummary');
+            const claim = claimsData[selectedClaim];
+            const payout = selectedClaimResult.payout_details || {};
+
+            summary.innerHTML = `
+                <div class="approval-row">
+                    <span class="label">청구번호</span>
+                    <span class="value">${claim.id}</span>
+                </div>
+                <div class="approval-row">
+                    <span class="label">고객명</span>
+                    <span class="value">${claim.customer.name}</span>
+                </div>
+                <div class="approval-row">
+                    <span class="label">청구액</span>
+                    <span class="value">₩${claim.amount.toLocaleString()}</span>
+                </div>
+                <div class="approval-row">
+                    <span class="label">승인액</span>
+                    <span class="value">₩${(payout.total_approved || 0).toLocaleString()}</span>
+                </div>
+            `;
+
+            document.getElementById('approveModal').classList.add('show');
+        }
+
+        function showRejectModal() {
+            alert('거절 사유를 입력하는 모달이 열립니다.');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+
+        function confirmApprove() {
+            closeModal('approveModal');
+
+            // Update claim status
+            claimsData[selectedClaim].status = 'approved';
+            claimsData[selectedClaim].statusLabel = '승인완료';
+            renderClaims();
+
+            // Show toast
+            showToast('청구가 승인되었습니다. 지급 처리가 시작됩니다.');
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            toast.classList.add('show', 'success');
+
+            setTimeout(() => {
+                toast.classList.remove('show', 'success');
+            }, 3000);
+        }
+
+        function refreshClaim() {
+            if (selectedClaim !== null) {
+                selectClaim(selectedClaim);
+            }
+        }
+
+        // Initialize
+        renderClaims();
+
+        // Filter tabs
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Nav items
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>
