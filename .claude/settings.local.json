@@ -75,7 +75,13 @@
       "Bash(npx live-server --port=5500 --no-browser)",
       "Bash(ls:*)",
       "Bash(dir \"c:\\\\pjt\\\\insurTech-export.zip\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: InsurTech AI 보험 심사 시스템\n\n- Backend: Node.js + TypeScript API \\(9,400줄\\)\n- Frontend: 대시보드 + 로그인 \\(3,900줄\\)\n- Database: PostgreSQL 스키마 + 마이그레이션\n- n8n: AI 워크플로우 7개\n- 발표자료: PRESENTATION.md\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git config:*)",
+      "Bash(gh:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

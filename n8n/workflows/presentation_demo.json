@@ -1,0 +1,129 @@
+{
+  "name": "🎤 발표 시연용 - AI 보험 심사 워크플로우",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "demo/claim-submit",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-1-webhook",
+      "name": "1️⃣ 청구 접수",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [100, 300],
+      "webhookId": "demo-claim-submit"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 📄 문서 OCR 분석 시뮬레이션\nconst input = $input.all()[0].json;\n\n// 실제로는 여기서 OCR API 호출\nconst ocrResult = {\n  documentType: \"진단서\",\n  hospital: \"서울대학교병원\",\n  diagnosis: \"급성 요추 염좌\",\n  treatmentDate: \"2024-01-15\",\n  doctorName: \"김영수\",\n  confidence: 0.95,\n  extractedText: \"상기 환자는 급성 요추 염좌로 2주간 안정가료를 요합니다.\"\n};\n\nreturn [{\n  json: {\n    ...input,\n    step: \"OCR 분석 완료\",\n    ocrResult: ocrResult\n  }\n}];"
+      },
+      "id": "node-2-ocr",
+      "name": "2️⃣ 문서 OCR 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 🤖 AI 보장 분석 (Claude/GPT 호출 시뮬레이션)\nconst input = $input.all()[0].json;\n\n// 실제로는 여기서 AI API 호출\nconst coverageAnalysis = {\n  model: \"Claude-3.5-Sonnet\",\n  analysisTime: \"1.2s\",\n  coverages: [\n    {\n      name: \"입원의료비\",\n      requestedAmount: 850000,\n      approvedAmount: 820000,\n      rejectedAmount: 30000,\n      rejectionReason: \"비급여 항목 일부 제외\",\n      confidence: 0.92\n    },\n    {\n      name: \"수술비\",\n      requestedAmount: 500000,\n      approvedAmount: 500000,\n      rejectedAmount: 0,\n      rejectionReason: null,\n      confidence: 0.98\n    },\n    {\n      name: \"통원치료비\",\n      requestedAmount: 150000,\n      approvedAmount: 120000,\n      rejectedAmount: 30000,\n      rejectionReason: \"약관 상 1일 한도 초과\",\n      confidence: 0.88\n    }\n  ],\n  totalRequested: 1500000,\n  totalApproved: 1440000,\n  totalRejected: 60000\n};\n\nreturn [{\n  json: {\n    ...input,\n    step: \"보장 분석 완료\",\n    coverageAnalysis: coverageAnalysis\n  }\n}];"
+      },
+      "id": "node-3-coverage",
+      "name": "3️⃣ AI 보장 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 🔍 AI 사기 탐지 분석\nconst input = $input.all()[0].json;\n\n// 사기 탐지 시뮬레이션\nconst fraudAnalysis = {\n  model: \"자체 ML 모델 v2.1\",\n  analysisTime: \"0.8s\",\n  riskScore: 23,\n  riskLevel: \"LOW\",\n  factors: [\n    {\n      name: \"청구 빈도\",\n      score: 15,\n      weight: 0.2,\n      description: \"최근 6개월 내 청구 1건 (정상)\"\n    },\n    {\n      name: \"청구 금액\",\n      score: 25,\n      weight: 0.25,\n      description: \"평균 청구 금액 범위 내\"\n    },\n    {\n      name: \"진단-치료 일치도\",\n      score: 10,\n      weight: 0.3,\n      description: \"진단명과 치료 내역 일치\"\n    },\n    {\n      name: \"병원 신뢰도\",\n      score: 5,\n      weight: 0.15,\n      description: \"상급종합병원 (신뢰도 높음)\"\n    },\n    {\n      name: \"서류 진위\",\n      score: 8,\n      weight: 0.1,\n      description: \"위변조 징후 없음\"\n    }\n  ],\n  recommendation: \"자동 승인 가능\",\n  needsManualReview: false\n};\n\nreturn [{\n  json: {\n    ...input,\n    step: \"사기 탐지 완료\",\n    fraudAnalysis: fraudAnalysis\n  }\n}];"
+      },
+      "id": "node-4-fraud",
+      "name": "4️⃣ AI 사기 탐지",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 📊 최종 심사 결과 종합\nconst input = $input.all()[0].json;\n\nconst finalResult = {\n  claimId: \"CLM-2024-\" + Math.floor(Math.random() * 10000).toString().padStart(5, '0'),\n  status: \"AI_APPROVED\",\n  statusKorean: \"AI 자동 승인\",\n  \n  // 금액 요약\n  summary: {\n    requestedAmount: input.coverageAnalysis.totalRequested,\n    approvedAmount: input.coverageAnalysis.totalApproved,\n    rejectedAmount: input.coverageAnalysis.totalRejected,\n    approvalRate: Math.round((input.coverageAnalysis.totalApproved / input.coverageAnalysis.totalRequested) * 100) + \"%\"\n  },\n  \n  // AI 분석 결과\n  aiAnalysis: {\n    ocrConfidence: input.ocrResult.confidence,\n    coverageModel: input.coverageAnalysis.model,\n    fraudRiskScore: input.fraudAnalysis.riskScore,\n    fraudRiskLevel: input.fraudAnalysis.riskLevel\n  },\n  \n  // 처리 시간\n  processingTime: {\n    ocrTime: \"0.5s\",\n    coverageTime: input.coverageAnalysis.analysisTime,\n    fraudTime: input.fraudAnalysis.analysisTime,\n    totalTime: \"2.5s\"\n  },\n  \n  // 다음 단계\n  nextStep: input.fraudAnalysis.needsManualReview \n    ? \"심사자 수동 검토 필요\" \n    : \"결재 요청 자동 진행\",\n  \n  timestamp: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    success: true,\n    message: \"AI 자동 심사가 완료되었습니다.\",\n    result: finalResult,\n    details: {\n      ocr: input.ocrResult,\n      coverage: input.coverageAnalysis,\n      fraud: input.fraudAnalysis\n    }\n  }\n}];"
+      },
+      "id": "node-5-result",
+      "name": "5️⃣ 최종 결과 종합",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "content": "## 🎤 발표 시연용 AI 보험 심사 워크플로우\n\n이 워크플로우는 발표에서 AI 기반 보험금 청구 심사 과정을 시연하기 위한 것입니다.\n\n### 📋 플로우 설명\n1. **청구 접수**: Webhook으로 청구 데이터 수신\n2. **문서 OCR 분석**: 진단서 등 문서에서 텍스트 추출\n3. **AI 보장 분석**: Claude/GPT가 보장 내역 분석 및 금액 산출\n4. **AI 사기 탐지**: ML 모델로 사기 위험도 분석\n5. **최종 결과**: 모든 분석 결과 종합\n\n### 🧪 테스트 방법\n```bash\ncurl -X POST http://localhost:5678/webhook/demo/claim-submit \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"claimantName\": \"홍길동\", \"amount\": 1500000}'\n```",
+        "height": 400,
+        "width": 400
+      },
+      "id": "note-1",
+      "name": "📌 설명",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [100, -150]
+    }
+  ],
+  "connections": {
+    "1️⃣ 청구 접수": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ 문서 OCR 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2️⃣ 문서 OCR 분석": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ AI 보장 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ AI 보장 분석": {
+      "main": [
+        [
+          {
+            "node": "4️⃣ AI 사기 탐지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4️⃣ AI 사기 탐지": {
+      "main": [
+        [
+          {
+            "node": "5️⃣ 최종 결과 종합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-15T00:00:00.000Z",
+  "versionId": "presentation-demo-v1"
+}
