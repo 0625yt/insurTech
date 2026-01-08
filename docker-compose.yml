@@ -15,6 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./database/mock_data.sql:/docker-entrypoint-initdb.d/02-mock_data.sql
+      - ./database/migration_v2_enterprise.sql:/docker-entrypoint-initdb.d/03-migration_v2_enterprise.sql
     networks:
       - insurtech-network
     healthcheck:
@@ -135,6 +136,18 @@ services:
       - insurtech-network
     depends_on:
       - postgres
+
+  # Frontend (Nginx serving static HTML)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: insurtech-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    networks:
+      - insurtech-network
 
 volumes:
   postgres_data:
