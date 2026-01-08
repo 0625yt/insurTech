@@ -1,0 +1,773 @@
+{
+  "name": "📎 서류 검증 및 OCR 처리 워크플로우",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "documents/upload",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "webhook-upload",
+      "name": "📥 서류 업로드",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "document-upload-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 업로드 데이터 검증\nconst body = $input.first().json.body;\nconst errors = [];\n\nif (!body.claimId) errors.push('claimId 필수');\nif (!body.documentType) errors.push('documentType 필수');\nif (!body.fileData) errors.push('fileData (Base64) 필수');\n\nconst validTypes = [\n  'ADMISSION_CERTIFICATE',    // 입원확인서\n  'DISCHARGE_CERTIFICATE',    // 퇴원확인서\n  'DIAGNOSIS_CERTIFICATE',    // 진단서\n  'MEDICAL_RECEIPT',          // 진료비 영수증\n  'PRESCRIPTION',             // 처방전\n  'SURGERY_RECORD',           // 수술기록지\n  'OUTPATIENT_RECORD',        // 통원확인서\n  'MEDICAL_RECORD',           // 진료기록부\n  'OTHER'                     // 기타\n];\n\nif (body.documentType && !validTypes.includes(body.documentType)) {\n  errors.push(`유효하지 않은 서류유형: ${body.documentType}`);\n}\n\nreturn {\n  isValid: errors.length === 0,\n  errors: errors,\n  claimId: body.claimId,\n  documentType: body.documentType,\n  fileName: body.fileName || 'document.pdf',\n  fileData: body.fileData,\n  uploadedAt: new Date().toISOString()\n};"
+      },
+      "id": "validate-upload",
+      "name": "✅ 업로드 검증",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "🔀 유효성 체크",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/claims/{{ $json.claimId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-claim",
+      "name": "📄 청구 정보 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/documents/checklist/{{ $('✅ 업로드 검증').item.json.claimId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-checklist",
+      "name": "📋 체크리스트 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"당신은 보험 서류 검증 전문가입니다. 제공된 서류 이미지에서 핵심 정보를 추출하고 검증하세요.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"다음 {{ $('✅ 업로드 검증').item.json.documentType }} 서류를 분석해주세요.\\n\\n검증 청구 정보:\\n- 청구번호: {{ $('📄 청구 정보 조회').item.json.data.claim_number }}\\n- 고객명: {{ $('📄 청구 정보 조회').item.json.data.customer_name }}\\n- 진단명: {{ $('📄 청구 정보 조회').item.json.data.diagnosis_name }}\\n- 병원명: {{ $('📄 청구 정보 조회').item.json.data.hospital_name }}\\n- 치료기간: {{ $('📄 청구 정보 조회').item.json.data.treatment_start_date }} ~ {{ $('📄 청구 정보 조회').item.json.data.treatment_end_date }}\\n\\n서류에서 다음 정보를 추출하고 청구 정보와 일치하는지 검증해주세요:\\n1. 환자명\\n2. 병원명\\n3. 진단명/진단코드\\n4. 입원/치료 기간\\n5. 금액 (영수증인 경우)\\n\\n다음 JSON 형식으로 응답하세요:\\n{\\n  \\\"extractedData\\\": {\\n    \\\"patientName\\\": \\\"추출된 환자명\\\",\\n    \\\"hospitalName\\\": \\\"추출된 병원명\\\",\\n    \\\"diagnosis\\\": \\\"추출된 진단명\\\",\\n    \\\"diagnosisCode\\\": \\\"추출된 진단코드\\\",\\n    \\\"treatmentPeriod\\\": \\\"추출된 치료기간\\\",\\n    \\\"amount\\\": 추출된 금액 (숫자, 없으면 null)\\n  },\\n  \\\"verification\\\": {\\n    \\\"patientNameMatch\\\": true/false,\\n    \\\"hospitalMatch\\\": true/false,\\n    \\\"diagnosisMatch\\\": true/false,\\n    \\\"periodMatch\\\": true/false,\\n    \\\"overallValid\\\": true/false\\n  },\\n  \\\"issues\\\": [\\\"발견된 문제점 목록\\\"],\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"documentQuality\\\": \\\"GOOD/FAIR/POOR\\\"\\n}\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"data:image/jpeg;base64,{{ $('✅ 업로드 검증').item.json.fileData }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 2000\n}",
+        "options": {}
+      },
+      "id": "ocr-analysis",
+      "name": "🔍 GPT-4o OCR 분석",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openai-api",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// OCR 결과 파싱 및 검증\nconst ocrResponse = $input.first().json.choices?.[0]?.message?.content;\nconst uploadData = $('✅ 업로드 검증').item.json;\nconst claimData = $('📄 청구 정보 조회').item.json.data;\nconst checklist = $('📋 체크리스트 조회').item.json.data || [];\n\nlet ocrResult;\ntry {\n  ocrResult = JSON.parse(ocrResponse.replace(/```json\\n?|```/g, ''));\n} catch (e) {\n  ocrResult = {\n    extractedData: {},\n    verification: { overallValid: false },\n    issues: ['OCR 결과 파싱 실패'],\n    confidence: 0,\n    documentQuality: 'POOR'\n  };\n}\n\n// 검증 상태 결정\nlet verificationStatus = 'PENDING';\nlet verificationResult = 'NEEDS_REVIEW';\n\nif (ocrResult.verification?.overallValid && ocrResult.confidence >= 0.8) {\n  verificationStatus = 'VERIFIED';\n  verificationResult = 'APPROVED';\n} else if (ocrResult.confidence < 0.5 || ocrResult.issues?.length > 2) {\n  verificationStatus = 'REJECTED';\n  verificationResult = 'REJECTED';\n} else {\n  verificationStatus = 'NEEDS_REVIEW';\n  verificationResult = 'NEEDS_MANUAL_REVIEW';\n}\n\n// 체크리스트에서 해당 서류 항목 찾기\nconst checklistItem = checklist.find(c => c.document_type === uploadData.documentType);\n\nreturn {\n  claimId: uploadData.claimId,\n  documentType: uploadData.documentType,\n  fileName: uploadData.fileName,\n  claim: claimData,\n  ocrResult: ocrResult,\n  verificationStatus: verificationStatus,\n  verificationResult: verificationResult,\n  checklistItemId: checklistItem?.id,\n  confidence: ocrResult.confidence,\n  issues: ocrResult.issues || [],\n  processedAt: new Date().toISOString()\n};"
+      },
+      "id": "parse-ocr",
+      "name": "📊 OCR 결과 파싱",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.verificationStatus }}",
+                    "rightValue": "VERIFIED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "VERIFIED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.verificationStatus }}",
+                    "rightValue": "REJECTED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "REJECTED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.verificationStatus }}",
+                    "rightValue": "NEEDS_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "NEEDS_REVIEW"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-status",
+      "name": "🔀 검증 결과 분기",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1540, 200]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/documents/verify/{{ $json.checklistItemId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"VERIFIED\",\n  \"verifiedBy\": \"AI_OCR\",\n  \"extractedData\": {{ JSON.stringify($json.ocrResult.extractedData) }},\n  \"confidence\": {{ $json.confidence }},\n  \"verifiedAt\": \"{{ $json.processedAt }}\"\n}",
+        "options": {}
+      },
+      "id": "update-verified",
+      "name": "✅ 검증 완료 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/documents/verify/{{ $json.checklistItemId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"REJECTED\",\n  \"verifiedBy\": \"AI_OCR\",\n  \"rejectionReason\": \"{{ $json.issues.join(', ') }}\",\n  \"extractedData\": {{ JSON.stringify($json.ocrResult.extractedData) }},\n  \"confidence\": {{ $json.confidence }},\n  \"verifiedAt\": \"{{ $json.processedAt }}\"\n}",
+        "options": {}
+      },
+      "id": "update-rejected",
+      "name": "❌ 검증 실패 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/documents/verify/{{ $json.checklistItemId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"NEEDS_REVIEW\",\n  \"verifiedBy\": \"AI_OCR\",\n  \"reviewNote\": \"AI 검증 불확실 - 수동 검토 필요\",\n  \"issues\": {{ JSON.stringify($json.issues) }},\n  \"extractedData\": {{ JSON.stringify($json.ocrResult.extractedData) }},\n  \"confidence\": {{ $json.confidence }},\n  \"verifiedAt\": \"{{ $json.processedAt }}\"\n}",
+        "options": {}
+      },
+      "id": "update-needs-review",
+      "name": "⚠️ 수동 검토 요청",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/documents/checklist/{{ $('📊 OCR 결과 파싱').item.json.claimId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "check-all-docs",
+      "name": "📋 전체 서류 확인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 모든 서류 완료 여부 확인\nconst checklist = $input.first().json.data || [];\nconst claimData = $('📊 OCR 결과 파싱').item.json.claim;\n\nconst totalDocs = checklist.length;\nconst verifiedDocs = checklist.filter(c => c.status === 'VERIFIED').length;\nconst rejectedDocs = checklist.filter(c => c.status === 'REJECTED').length;\nconst pendingDocs = checklist.filter(c => c.status === 'PENDING' || c.status === 'NEEDS_REVIEW').length;\n\nconst allVerified = verifiedDocs === totalDocs && totalDocs > 0;\nconst hasRejected = rejectedDocs > 0;\n\nreturn {\n  claimId: $('📊 OCR 결과 파싱').item.json.claimId,\n  claim: claimData,\n  totalDocs: totalDocs,\n  verifiedDocs: verifiedDocs,\n  rejectedDocs: rejectedDocs,\n  pendingDocs: pendingDocs,\n  allVerified: allVerified,\n  hasRejected: hasRejected,\n  checklist: checklist,\n  canProceed: allVerified && !hasRejected\n};"
+      },
+      "id": "check-completion",
+      "name": "🔍 완료 여부 확인",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "all-verified",
+              "leftValue": "={{ $json.allVerified }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-all-verified",
+      "name": "🔀 전체 검증 완료?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2420, 100]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/claims/{{ $json.claimId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"document_status\": \"COMPLETE\",\n  \"document_verified_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "update-claim-complete",
+      "name": "📄 청구 서류완료 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=✅ *서류 검증 완료*\n\n청구번호: {{ $json.claim.claim_number }}\n고객명: {{ $json.claim.customer_name }}\n\n📎 총 {{ $json.totalDocs }}건 서류 모두 검증 완료\n\n청구 심사를 진행할 수 있습니다.",
+        "otherOptions": {}
+      },
+      "id": "slack-all-complete",
+      "name": "📱 Slack (전체완료)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2860, 0],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=✅ *서류 검증 성공*\n\n청구번호: {{ $('📊 OCR 결과 파싱').item.json.claim.claim_number }}\n서류유형: {{ $('📊 OCR 결과 파싱').item.json.documentType }}\n신뢰도: {{ ($('📊 OCR 결과 파싱').item.json.confidence * 100).toFixed(1) }}%\n\n추출 정보:\n• 환자명: {{ $('📊 OCR 결과 파싱').item.json.ocrResult.extractedData.patientName }}\n• 병원명: {{ $('📊 OCR 결과 파싱').item.json.ocrResult.extractedData.hospitalName }}\n• 진단명: {{ $('📊 OCR 결과 파싱').item.json.ocrResult.extractedData.diagnosis }}",
+        "otherOptions": {}
+      },
+      "id": "slack-verified",
+      "name": "📱 Slack (검증성공)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1980, -100],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=❌ *서류 검증 실패*\n\n청구번호: {{ $('📊 OCR 결과 파싱').item.json.claim.claim_number }}\n서류유형: {{ $('📊 OCR 결과 파싱').item.json.documentType }}\n\n문제점:\n{{ $('📊 OCR 결과 파싱').item.json.issues.map(i => '• ' + i).join('\\n') }}\n\n재제출이 필요합니다.",
+        "otherOptions": {}
+      },
+      "id": "slack-rejected",
+      "name": "📱 Slack (검증실패)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1980, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=⚠️ *서류 수동 검토 필요*\n\n청구번호: {{ $('📊 OCR 결과 파싱').item.json.claim.claim_number }}\n서류유형: {{ $('📊 OCR 결과 파싱').item.json.documentType }}\nAI 신뢰도: {{ ($('📊 OCR 결과 파싱').item.json.confidence * 100).toFixed(1) }}%\n\n불확실 항목:\n{{ $('📊 OCR 결과 파싱').item.json.issues.map(i => '• ' + i).join('\\n') }}\n\n담당자 확인이 필요합니다.",
+        "otherOptions": {}
+      },
+      "id": "slack-needs-review",
+      "name": "📱 Slack (수동검토)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1980, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"서류가 성공적으로 검증되었습니다.\",\n  \"data\": {\n    \"claimId\": {{ $('📊 OCR 결과 파싱').item.json.claimId }},\n    \"documentType\": \"{{ $('📊 OCR 결과 파싱').item.json.documentType }}\",\n    \"status\": \"VERIFIED\",\n    \"confidence\": {{ $('📊 OCR 결과 파싱').item.json.confidence }},\n    \"extractedData\": {{ JSON.stringify($('📊 OCR 결과 파싱').item.json.ocrResult.extractedData) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "response-verified",
+      "name": "📤 응답 (검증성공)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3080, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"서류 검증에 실패했습니다. 재제출이 필요합니다.\",\n  \"data\": {\n    \"claimId\": {{ $('📊 OCR 결과 파싱').item.json.claimId }},\n    \"documentType\": \"{{ $('📊 OCR 결과 파싱').item.json.documentType }}\",\n    \"status\": \"REJECTED\",\n    \"issues\": {{ JSON.stringify($('📊 OCR 결과 파싱').item.json.issues) }}\n  }\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-rejected",
+      "name": "📤 응답 (검증실패)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2200, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"서류가 제출되었으나 수동 검토가 필요합니다.\",\n  \"data\": {\n    \"claimId\": {{ $('📊 OCR 결과 파싱').item.json.claimId }},\n    \"documentType\": \"{{ $('📊 OCR 결과 파싱').item.json.documentType }}\",\n    \"status\": \"NEEDS_REVIEW\",\n    \"confidence\": {{ $('📊 OCR 결과 파싱').item.json.confidence }},\n    \"issues\": {{ JSON.stringify($('📊 OCR 결과 파싱').item.json.issues) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "response-needs-review",
+      "name": "📤 응답 (수동검토)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2200, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"업로드 데이터 검증 실패\",\n  \"errors\": {{ JSON.stringify($json.errors) }}\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-validation-error",
+      "name": "❌ 응답 (검증오류)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"entityType\": \"DOCUMENT\",\n  \"entityId\": {{ $('📊 OCR 결과 파싱').item.json.checklistItemId || 0 }},\n  \"action\": \"OCR_VERIFICATION\",\n  \"userId\": 1,\n  \"details\": {\n    \"claimId\": {{ $('📊 OCR 결과 파싱').item.json.claimId }},\n    \"documentType\": \"{{ $('📊 OCR 결과 파싱').item.json.documentType }}\",\n    \"status\": \"{{ $('📊 OCR 결과 파싱').item.json.verificationStatus }}\",\n    \"confidence\": {{ $('📊 OCR 결과 파싱').item.json.confidence }},\n    \"source\": \"n8n-ocr-workflow\"\n  }\n}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "📝 감사 로그",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "📥 서류 업로드": {
+      "main": [
+        [
+          {
+            "node": "✅ 업로드 검증",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 업로드 검증": {
+      "main": [
+        [
+          {
+            "node": "🔀 유효성 체크",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 유효성 체크": {
+      "main": [
+        [
+          {
+            "node": "📄 청구 정보 조회",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 응답 (검증오류)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 청구 정보 조회": {
+      "main": [
+        [
+          {
+            "node": "📋 체크리스트 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 체크리스트 조회": {
+      "main": [
+        [
+          {
+            "node": "🔍 GPT-4o OCR 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 GPT-4o OCR 분석": {
+      "main": [
+        [
+          {
+            "node": "📊 OCR 결과 파싱",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 OCR 결과 파싱": {
+      "main": [
+        [
+          {
+            "node": "🔀 검증 결과 분기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 검증 결과 분기": {
+      "main": [
+        [
+          {
+            "node": "✅ 검증 완료 처리",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 검증 실패 처리",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⚠️ 수동 검토 요청",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 검증 완료 처리": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (검증성공)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📋 전체 서류 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "❌ 검증 실패 처리": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (검증실패)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚠️ 수동 검토 요청": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (수동검토)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (검증실패)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (검증실패)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (수동검토)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (수동검토)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 전체 서류 확인": {
+      "main": [
+        [
+          {
+            "node": "🔍 완료 여부 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 완료 여부 확인": {
+      "main": [
+        [
+          {
+            "node": "🔀 전체 검증 완료?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 전체 검증 완료?": {
+      "main": [
+        [
+          {
+            "node": "📄 청구 서류완료 처리",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📤 응답 (검증성공)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 청구 서류완료 처리": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (전체완료)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (전체완료)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (검증성공)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4",
+  "meta": {
+    "instanceId": "insurtech-n8n"
+  },
+  "tags": [
+    {
+      "name": "서류",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "OCR",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

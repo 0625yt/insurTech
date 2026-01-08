@@ -13,14 +13,16 @@ export const getPolicyList = async (req: Request, res: Response, next: NextFunct
 
     const query = `
       SELECT
-        policy_id, policy_type, coverage_start_date, coverage_end_date,
-        policyholder_name, premium_status, created_at
-      FROM insurance_policies
-      ORDER BY created_at DESC
+        p.id, p.policy_number, p.product_code, p.product_name,
+        p.coverage_start_date, p.coverage_end_date,
+        c.name as customer_name, p.premium_status, p.status, p.created_at
+      FROM policies p
+      LEFT JOIN customers c ON p.customer_id = c.id
+      ORDER BY p.created_at DESC
       LIMIT $1 OFFSET $2
     `;
 
-    const countQuery = `SELECT COUNT(*) FROM insurance_policies`;
+    const countQuery = `SELECT COUNT(*) FROM policies`;
 
     const [dataResult, countResult] = await Promise.all([
       db.query(query, [limit, offset]),
@@ -64,7 +66,10 @@ export const getPolicyById = async (req: Request, res: Response, next: NextFunct
 
     // DB 조회
     const result = await db.query(
-      `SELECT * FROM insurance_policies WHERE policy_id = $1`,
+      `SELECT p.*, c.name as customer_name, c.customer_code
+       FROM policies p
+       LEFT JOIN customers c ON p.customer_id = c.id
+       WHERE p.id = $1`,
       [policyId]
     );
 
@@ -99,7 +104,7 @@ export const getPolicyCoverages = async (req: Request, res: Response, next: Next
 
     // 먼저 보험증권 존재 여부 확인
     const policyResult = await db.query(
-      `SELECT policy_type FROM insurance_policies WHERE policy_id = $1`,
+      `SELECT id, product_code, policy_number FROM policies WHERE id = $1`,
       [policyId]
     );
 
@@ -110,19 +115,27 @@ export const getPolicyCoverages = async (req: Request, res: Response, next: Next
       });
     }
 
-    const policyType = policyResult.rows[0].policy_type;
+    const policy = policyResult.rows[0];
 
-    // 해당 보험 타입의 담보 조회
+    // 해당 증권의 담보 조회
     const coverageResult = await db.query(
-      `SELECT * FROM coverage_definitions WHERE policy_type = $1 ORDER BY coverage_code`,
-      [policyType]
+      `SELECT
+         id, coverage_code, coverage_name, insured_amount,
+         deductible_type, deductible_amount, deductible_rate,
+         payout_rate, max_days, max_times, per_occurrence_limit,
+         annual_limit, lifetime_limit, is_active
+       FROM policy_coverages
+       WHERE policy_id = $1 AND is_active = true
+       ORDER BY coverage_code`,
+      [policyId]
     );
 
     res.json({
       success: true,
       policy_id: policyId,
-      policy_type: policyType,
-      coverages: coverageResult.rows,
+      policy_number: policy.policy_number,
+      product_code: policy.product_code,
+      data: coverageResult.rows,
     });
   } catch (error) {
     next(error);

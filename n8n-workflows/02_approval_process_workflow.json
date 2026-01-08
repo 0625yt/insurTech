@@ -1,0 +1,1351 @@
+{
+  "name": "📝 결재 프로세스 워크플로우",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approvals/process",
+        "options": {}
+      },
+      "id": "webhook-approval",
+      "name": "📥 결재 요청 수신",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "approval-process-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 결재 요청 데이터 검증\nconst request = $input.first().json.body;\nconst headers = $input.first().json.headers;\n\nconst errors = [];\n\n// 필수 필드 검증\nif (!request.approvalId) errors.push('approvalId 필수');\nif (!request.action) errors.push('action 필수');\n\n// action 유효성\nconst validActions = ['APPROVE', 'REJECT', 'RETURN', 'HOLD', 'DELEGATE', 'SKIP'];\nif (request.action && !validActions.includes(request.action)) {\n  errors.push(`유효하지 않은 action: ${request.action}`);\n}\n\n// REJECT, RETURN 시 사유 필수\nif (['REJECT', 'RETURN'].includes(request.action) && !request.reason) {\n  errors.push('거절/반려 시 사유 필수');\n}\n\n// DELEGATE 시 대상자 필수\nif (request.action === 'DELEGATE' && !request.delegateTo) {\n  errors.push('위임 시 대상자 필수');\n}\n\n// JWT 토큰 추출\nconst authHeader = headers.authorization || headers.Authorization;\nconst token = authHeader ? authHeader.replace('Bearer ', '') : null;\n\nreturn {\n  isValid: errors.length === 0,\n  errors: errors,\n  request: request,\n  token: token,\n  receivedAt: new Date().toISOString()\n};"
+      },
+      "id": "validate-approval",
+      "name": "✅ 결재 요청 검증",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "🔀 유효성 체크",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://insurtech-api:3000/api/auth/me",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-user",
+      "name": "👤 결재자 정보 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('✅ 결재 요청 검증').item.json.request.approvalId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-approval",
+      "name": "📋 결재 정보 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/claims/{{ $json.data.claim_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-claim",
+      "name": "📄 청구 정보 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 결재 권한 검증\nconst user = $('👤 결재자 정보 조회').item.json.data;\nconst approval = $('📋 결재 정보 조회').item.json.data;\nconst claim = $('📄 청구 정보 조회').item.json.data;\nconst request = $('✅ 결재 요청 검증').item.json.request;\n\nconst issues = [];\nlet hasAuthority = true;\n\n// 1. 현재 결재 단계의 결재자인지 확인\nconst currentStep = approval.current_step;\nconst myInbox = approval.inbox?.find(i => \n  i.user_id === user.id && \n  i.step_no === currentStep &&\n  i.status === 'PENDING'\n);\n\nif (!myInbox) {\n  issues.push('현재 단계의 결재 권한이 없습니다');\n  hasAuthority = false;\n}\n\n// 2. 결재 한도 확인\nif (request.action === 'APPROVE' && claim.total_approved > user.approvalLimit) {\n  issues.push(`결재 한도 초과 (한도: ${user.approvalLimit.toLocaleString()}원, 청구액: ${claim.total_approved.toLocaleString()}원)`);\n  hasAuthority = false;\n}\n\n// 3. 결재 상태 확인\nif (approval.status !== 'IN_PROGRESS') {\n  issues.push(`결재 상태 이상: ${approval.status}`);\n  hasAuthority = false;\n}\n\n// 4. 역할 레벨 확인\nconst requiredLevel = approval.steps?.[currentStep - 1]?.required_role_level || 1;\nif (user.roleLevel < requiredLevel) {\n  issues.push(`역할 레벨 부족 (필요: ${requiredLevel}, 현재: ${user.roleLevel})`);\n  hasAuthority = false;\n}\n\nreturn {\n  hasAuthority: hasAuthority,\n  issues: issues,\n  user: user,\n  approval: approval,\n  claim: claim,\n  request: request,\n  currentStep: currentStep,\n  totalSteps: approval.total_steps,\n  isLastStep: currentStep === approval.total_steps\n};"
+      },
+      "id": "check-authority",
+      "name": "🔐 결재 권한 검증",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "authority-check",
+              "leftValue": "={{ $json.hasAuthority }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-authorized",
+      "name": "🔀 권한 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, 200]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.request.action }}",
+                    "rightValue": "APPROVE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "APPROVE"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.request.action }}",
+                    "rightValue": "REJECT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "REJECT"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.request.action }}",
+                    "rightValue": "RETURN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "RETURN"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.request.action }}",
+                    "rightValue": "HOLD",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HOLD"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.request.action }}",
+                    "rightValue": "DELEGATE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "DELEGATE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-action",
+      "name": "🔀 결재 액션 분기",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1760, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-last-step",
+              "leftValue": "={{ $json.isLastStep }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-last-step",
+      "name": "🔀 최종 단계?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 0]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}/step/{{ $('🔐 결재 권한 검증').item.json.currentStep }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"APPROVED\",\n  \"processedBy\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"comment\": \"{{ $('🔐 결재 권한 검증').item.json.request.comment || '승인' }}\",\n  \"processedAt\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "approve-step",
+      "name": "✅ 현재 단계 승인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/claims/{{ $('🔐 결재 권한 검증').item.json.claim.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"APPROVED\",\n  \"approved_amount\": {{ $('🔐 결재 권한 검증').item.json.claim.total_approved }},\n  \"approved_by\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"approved_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "final-approve-claim",
+      "name": "🎉 최종 승인 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"APPROVED\",\n  \"completedAt\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "complete-approval",
+      "name": "📋 결재 완료 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}/next-step",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"currentStep\": {{ $('🔐 결재 권한 검증').item.json.currentStep }},\n  \"processedBy\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"comment\": \"{{ $('🔐 결재 권한 검증').item.json.request.comment || '승인 - 다음 단계로' }}\"\n}",
+        "options": {}
+      },
+      "id": "next-step",
+      "name": "➡️ 다음 단계 진행",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/auth/approvers?roleLevel={{ $('🔐 결재 권한 검증').item.json.approval.steps[$('🔐 결재 권한 검증').item.json.currentStep].required_role_level }}&team={{ $('🔐 결재 권한 검증').item.json.user.team }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-next-approver",
+      "name": "👤 다음 결재자 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}/assign",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"userId\": {{ $json.data[0]?.id || 0 }},\n  \"stepNo\": {{ $('🔐 결재 권한 검증').item.json.currentStep + 1 }}\n}",
+        "options": {}
+      },
+      "id": "assign-next",
+      "name": "📨 다음 결재자 배정",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/claims/{{ $('🔐 결재 권한 검증').item.json.claim.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"REJECTED\",\n  \"rejected_reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason }}\",\n  \"rejected_by\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"rejected_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "reject-claim",
+      "name": "❌ 청구 거절",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"REJECTED\",\n  \"rejectedReason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason }}\",\n  \"completedAt\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "reject-approval",
+      "name": "📋 결재 거절 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/claims/{{ $('🔐 결재 권한 검증').item.json.claim.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"RETURNED\",\n  \"return_reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason }}\",\n  \"returned_by\": {{ $('🔐 결재 권한 검증').item.json.user.id }}\n}",
+        "options": {}
+      },
+      "id": "return-claim",
+      "name": "↩️ 청구 반려",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"RETURNED\",\n  \"returnReason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason }}\",\n  \"current_step\": 1\n}",
+        "options": {}
+      },
+      "id": "return-approval",
+      "name": "📋 결재 반려 처리",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"HOLD\",\n  \"holdReason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason || '추가 서류 필요' }}\"\n}",
+        "options": {}
+      },
+      "id": "hold-approval",
+      "name": "⏸️ 결재 보류",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/documents/request-additional",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"claimId\": {{ $('🔐 결재 권한 검증').item.json.claim.id }},\n  \"requestedBy\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"documents\": {{ JSON.stringify($('🔐 결재 권한 검증').item.json.request.requiredDocuments || ['기타 증빙서류']) }},\n  \"reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason || '추가 서류 필요' }}\"\n}",
+        "options": {}
+      },
+      "id": "request-documents",
+      "name": "📎 추가 서류 요청",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/auth/users/{{ $('🔐 결재 권한 검증').item.json.request.delegateTo }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-delegate-user",
+      "name": "👤 위임 대상자 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 560],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://insurtech-api:3000/api/approvals/{{ $('🔐 결재 권한 검증').item.json.approval.id }}/delegate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fromUserId\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"toUserId\": {{ $json.data.id }},\n  \"stepNo\": {{ $('🔐 결재 권한 검증').item.json.currentStep }},\n  \"reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason || '업무 위임' }}\"\n}",
+        "options": {}
+      },
+      "id": "delegate-approval",
+      "name": "🔄 결재 위임",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 560],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"entityType\": \"APPROVAL\",\n  \"entityId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n  \"action\": \"{{ $('🔐 결재 권한 검증').item.json.request.action }}\",\n  \"userId\": {{ $('🔐 결재 권한 검증').item.json.user.id }},\n  \"details\": {\n    \"claimId\": {{ $('🔐 결재 권한 검증').item.json.claim.id }},\n    \"claimNumber\": \"{{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\",\n    \"step\": {{ $('🔐 결재 권한 검증').item.json.currentStep }},\n    \"action\": \"{{ $('🔐 결재 권한 검증').item.json.request.action }}\",\n    \"comment\": \"{{ $('🔐 결재 권한 검증').item.json.request.comment || '' }}\",\n    \"reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason || '' }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "📝 감사 로그",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=🎉 *청구 최종 승인*\n\n청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\n고객명: {{ $('🔐 결재 권한 검증').item.json.claim.customer_name }}\n승인금액: {{ $('🔐 결재 권한 검증').item.json.claim.total_approved.toLocaleString() }}원\n\n최종 결재자: {{ $('🔐 결재 권한 검증').item.json.user.name }} ({{ $('🔐 결재 권한 검증').item.json.user.position }})\n결재 완료: {{ new Date().toLocaleString('ko-KR') }}",
+        "otherOptions": {}
+      },
+      "id": "slack-final-approved",
+      "name": "📱 Slack (최종승인)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2880, -100],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=➡️ *다음 결재 단계*\n\n청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\n현재 단계: {{ $('🔐 결재 권한 검증').item.json.currentStep }} / {{ $('🔐 결재 권한 검증').item.json.totalSteps }}\n\n승인자: {{ $('🔐 결재 권한 검증').item.json.user.name }}\n다음 결재자: {{ $json.data?.[0]?.name || 'TBD' }}\n\n결재 바로가기: http://localhost:3001/approvals",
+        "otherOptions": {}
+      },
+      "id": "slack-next-step",
+      "name": "📱 Slack (다음단계)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2880, 100],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=❌ *청구 거절*\n\n청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\n고객명: {{ $('🔐 결재 권한 검증').item.json.claim.customer_name }}\n\n거절 사유: {{ $('🔐 결재 권한 검증').item.json.request.reason }}\n처리자: {{ $('🔐 결재 권한 검증').item.json.user.name }}",
+        "otherOptions": {}
+      },
+      "id": "slack-rejected",
+      "name": "📱 Slack (거절)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2440, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=↩️ *청구 반려 (수정 요청)*\n\n청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\n\n반려 사유: {{ $('🔐 결재 권한 검증').item.json.request.reason }}\n처리자: {{ $('🔐 결재 권한 검증').item.json.user.name }}\n\n수정 후 재제출 필요",
+        "otherOptions": {}
+      },
+      "id": "slack-returned",
+      "name": "📱 Slack (반려)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2440, 320],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=⏸️ *결재 보류*\n\n청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\n\n보류 사유: {{ $('🔐 결재 권한 검증').item.json.request.reason }}\n추가 필요 서류: {{ $('🔐 결재 권한 검증').item.json.request.requiredDocuments?.join(', ') || '별도 안내' }}\n\n처리자: {{ $('🔐 결재 권한 검증').item.json.user.name }}",
+        "otherOptions": {}
+      },
+      "id": "slack-hold",
+      "name": "📱 Slack (보류)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2440, 440],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=🔄 *결재 위임*\n\n청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}\n\n위임자: {{ $('🔐 결재 권한 검증').item.json.user.name }}\n수임자: {{ $json.data.name }}\n사유: {{ $('🔐 결재 권한 검증').item.json.request.reason || '업무 위임' }}",
+        "otherOptions": {}
+      },
+      "id": "slack-delegated",
+      "name": "📱 Slack (위임)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2440, 560],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "claims@insurtech.co.kr",
+        "toEmail": "={{ $('🔐 결재 권한 검증').item.json.claim.customer_email }}",
+        "subject": "=보험금 청구 승인 완료 - {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}",
+        "emailType": "html",
+        "html": "=<h2>🎉 보험금 청구가 승인되었습니다</h2>\n<p>안녕하세요, {{ $('🔐 결재 권한 검증').item.json.claim.customer_name }}님</p>\n<p>귀하의 보험금 청구가 최종 승인되었습니다.</p>\n<hr>\n<h3>승인 정보</h3>\n<ul>\n<li>청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}</li>\n<li>청구금액: {{ $('🔐 결재 권한 검증').item.json.claim.total_medical_expense.toLocaleString() }}원</li>\n<li><strong>승인금액: {{ $('🔐 결재 권한 검증').item.json.claim.total_approved.toLocaleString() }}원</strong></li>\n</ul>\n<p>승인된 금액은 <strong>영업일 기준 3일 이내</strong>에 등록된 계좌로 입금될 예정입니다.</p>\n<p>감사합니다.</p>",
+        "options": {}
+      },
+      "id": "email-approved",
+      "name": "📧 고객 메일 (승인)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3100, -100],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-config",
+          "name": "SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "claims@insurtech.co.kr",
+        "toEmail": "={{ $('🔐 결재 권한 검증').item.json.claim.customer_email }}",
+        "subject": "=보험금 청구 거절 안내 - {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}",
+        "emailType": "html",
+        "html": "=<h2>보험금 청구 결과 안내</h2>\n<p>안녕하세요, {{ $('🔐 결재 권한 검증').item.json.claim.customer_name }}님</p>\n<p>귀하의 보험금 청구에 대해 안내드립니다.</p>\n<hr>\n<h3>청구 정보</h3>\n<ul>\n<li>청구번호: {{ $('🔐 결재 권한 검증').item.json.claim.claim_number }}</li>\n<li>결과: <strong>거절</strong></li>\n<li>사유: {{ $('🔐 결재 권한 검증').item.json.request.reason }}</li>\n</ul>\n<p>이의가 있으시면 고객센터(1588-0000)로 연락주시기 바랍니다.</p>\n<p>감사합니다.</p>",
+        "options": {}
+      },
+      "id": "email-rejected",
+      "name": "📧 고객 메일 (거절)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2660, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-config",
+          "name": "SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"결재가 처리되었습니다.\",\n  \"data\": {\n    \"approvalId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n    \"action\": \"{{ $('🔐 결재 권한 검증').item.json.request.action }}\",\n    \"status\": \"APPROVED\",\n    \"isFinal\": true,\n    \"processedAt\": \"{{ new Date().toISOString() }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-final-approved",
+      "name": "📤 응답 (최종승인)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3320, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"결재가 처리되어 다음 단계로 진행됩니다.\",\n  \"data\": {\n    \"approvalId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n    \"action\": \"APPROVE\",\n    \"currentStep\": {{ $('🔐 결재 권한 검증').item.json.currentStep + 1 }},\n    \"totalSteps\": {{ $('🔐 결재 권한 검증').item.json.totalSteps }},\n    \"nextApprover\": \"{{ $('👤 다음 결재자 조회').item.json.data?.[0]?.name || 'TBD' }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-next-step",
+      "name": "📤 응답 (다음단계)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"청구가 거절되었습니다.\",\n  \"data\": {\n    \"approvalId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n    \"action\": \"REJECT\",\n    \"reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-rejected",
+      "name": "📤 응답 (거절)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"청구가 반려되었습니다. 수정 후 재제출 필요합니다.\",\n  \"data\": {\n    \"approvalId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n    \"action\": \"RETURN\",\n    \"reason\": \"{{ $('🔐 결재 권한 검증').item.json.request.reason }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-returned",
+      "name": "📤 응답 (반려)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"결재가 보류되었습니다. 추가 서류 요청됨.\",\n  \"data\": {\n    \"approvalId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n    \"action\": \"HOLD\",\n    \"requiredDocuments\": {{ JSON.stringify($('🔐 결재 권한 검증').item.json.request.requiredDocuments || []) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "response-hold",
+      "name": "📤 응답 (보류)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 440]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"결재가 위임되었습니다.\",\n  \"data\": {\n    \"approvalId\": {{ $('🔐 결재 권한 검증').item.json.approval.id }},\n    \"action\": \"DELEGATE\",\n    \"delegatedTo\": \"{{ $('👤 위임 대상자 조회').item.json.data.name }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-delegated",
+      "name": "📤 응답 (위임)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 560]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"요청 데이터 검증 실패\",\n  \"errors\": {{ JSON.stringify($json.errors) }}\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-validation-error",
+      "name": "❌ 응답 (검증실패)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"결재 권한이 없습니다.\",\n  \"issues\": {{ JSON.stringify($json.issues) }}\n}",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "id": "response-no-authority",
+      "name": "❌ 응답 (권한없음)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 400]
+    }
+  ],
+  "connections": {
+    "📥 결재 요청 수신": {
+      "main": [
+        [
+          {
+            "node": "✅ 결재 요청 검증",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 결재 요청 검증": {
+      "main": [
+        [
+          {
+            "node": "🔀 유효성 체크",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 유효성 체크": {
+      "main": [
+        [
+          {
+            "node": "👤 결재자 정보 조회",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 응답 (검증실패)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👤 결재자 정보 조회": {
+      "main": [
+        [
+          {
+            "node": "📋 결재 정보 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 결재 정보 조회": {
+      "main": [
+        [
+          {
+            "node": "📄 청구 정보 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 청구 정보 조회": {
+      "main": [
+        [
+          {
+            "node": "🔐 결재 권한 검증",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔐 결재 권한 검증": {
+      "main": [
+        [
+          {
+            "node": "🔀 권한 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 권한 확인": {
+      "main": [
+        [
+          {
+            "node": "🔀 결재 액션 분기",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 응답 (권한없음)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 결재 액션 분기": {
+      "main": [
+        [
+          {
+            "node": "🔀 최종 단계?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 청구 거절",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "↩️ 청구 반려",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⏸️ 결재 보류",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "👤 위임 대상자 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 최종 단계?": {
+      "main": [
+        [
+          {
+            "node": "✅ 현재 단계 승인",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "➡️ 다음 단계 진행",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 현재 단계 승인": {
+      "main": [
+        [
+          {
+            "node": "🎉 최종 승인 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎉 최종 승인 처리": {
+      "main": [
+        [
+          {
+            "node": "📋 결재 완료 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 결재 완료 처리": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (최종승인)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (최종승인)": {
+      "main": [
+        [
+          {
+            "node": "📧 고객 메일 (승인)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 고객 메일 (승인)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (최종승인)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "➡️ 다음 단계 진행": {
+      "main": [
+        [
+          {
+            "node": "👤 다음 결재자 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👤 다음 결재자 조회": {
+      "main": [
+        [
+          {
+            "node": "📨 다음 결재자 배정",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📨 다음 결재자 배정": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (다음단계)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (다음단계)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (다음단계)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "❌ 청구 거절": {
+      "main": [
+        [
+          {
+            "node": "📋 결재 거절 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 결재 거절 처리": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (거절)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (거절)": {
+      "main": [
+        [
+          {
+            "node": "📧 고객 메일 (거절)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 고객 메일 (거절)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (거절)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "↩️ 청구 반려": {
+      "main": [
+        [
+          {
+            "node": "📋 결재 반려 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 결재 반려 처리": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (반려)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (반려)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (반려)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏸️ 결재 보류": {
+      "main": [
+        [
+          {
+            "node": "📎 추가 서류 요청",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📎 추가 서류 요청": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (보류)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (보류)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (보류)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👤 위임 대상자 조회": {
+      "main": [
+        [
+          {
+            "node": "🔄 결재 위임",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 결재 위임": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (위임)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (위임)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (위임)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2",
+  "meta": {
+    "instanceId": "insurtech-n8n"
+  },
+  "tags": [
+    {
+      "name": "결재",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "워크플로우",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

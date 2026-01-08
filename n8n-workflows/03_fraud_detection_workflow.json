@@ -1,0 +1,856 @@
+{
+  "name": "🚨 사기 탐지 일일 분석 워크플로우",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24,
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "⏰ 매일 02:00 실행",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fraud/analyze-batch",
+        "options": {}
+      },
+      "id": "webhook-manual",
+      "name": "📥 수동 분석 트리거",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 500],
+      "webhookId": "fraud-analyze-batch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/auth/login",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "system"
+            },
+            {
+              "name": "password",
+              "value": "system123!"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "auth-login",
+      "name": "🔐 시스템 로그인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.*,\n  p.customer_id,\n  cu.name as customer_name,\n  cu.risk_grade,\n  cu.risk_score as customer_risk_score\nFROM claims c\nJOIN policies p ON c.policy_id = p.id\nJOIN customers cu ON p.customer_id = cu.id\nWHERE c.created_at >= NOW() - INTERVAL '24 hours'\n  AND c.status IN ('PENDING', 'IN_PROGRESS')\nORDER BY c.created_at DESC",
+        "options": {}
+      },
+      "id": "get-recent-claims",
+      "name": "📊 최근 24시간 청구 조회",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id,\n  c.claim_number,\n  c.fraud_score,\n  c.fraud_risk_level,\n  c.customer_name,\n  c.total_medical_expense,\n  c.diagnosis_code,\n  c.hospital_name,\n  c.created_at\nFROM claims c\nWHERE c.fraud_score >= 50\n  AND c.status NOT IN ('APPROVED', 'REJECTED')\nORDER BY c.fraud_score DESC\nLIMIT 100",
+        "options": {}
+      },
+      "id": "get-high-risk-claims",
+      "name": "🔴 고위험 청구 조회",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-claims",
+      "name": "🔗 청구 데이터 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "split-batch",
+      "name": "📦 10건씩 배치 처리",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  c.id,\n  c.claim_number,\n  c.diagnosis_code,\n  c.hospital_name,\n  c.total_medical_expense,\n  c.treatment_start_date,\n  c.created_at\nFROM claims c\nJOIN policies p ON c.policy_id = p.id\nWHERE p.customer_id = (\n  SELECT p2.customer_id \n  FROM claims c2 \n  JOIN policies p2 ON c2.policy_id = p2.id \n  WHERE c2.id = {{ $json.id }}\n)\n  AND c.id != {{ $json.id }}\n  AND c.created_at >= NOW() - INTERVAL '90 days'\nORDER BY c.created_at DESC",
+        "options": {}
+      },
+      "id": "get-customer-history",
+      "name": "📜 고객 청구 이력 조회",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  COUNT(*) as claim_count,\n  hospital_name,\n  SUM(total_medical_expense) as total_amount\nFROM claims c\nJOIN policies p ON c.policy_id = p.id\nWHERE p.customer_id = (\n  SELECT p2.customer_id \n  FROM claims c2 \n  JOIN policies p2 ON c2.policy_id = p2.id \n  WHERE c2.id = {{ $json.id }}\n)\nGROUP BY hospital_name\nORDER BY claim_count DESC",
+        "options": {}
+      },
+      "id": "get-hospital-pattern",
+      "name": "🏥 병원 이용 패턴 조회",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-patterns",
+      "name": "🔗 패턴 데이터 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1320, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 사기 패턴 심층 분석\nconst claim = $('📦 10건씩 배치 처리').item.json;\nconst history = $('📜 고객 청구 이력 조회').all().map(i => i.json);\nconst hospitalPattern = $('🏥 병원 이용 패턴 조회').all().map(i => i.json);\n\nlet additionalScore = 0;\nconst newPatterns = [];\n\n// 1. 단기다수청구 분석 (7일 내)\nconst recentClaims = history.filter(h => {\n  const daysDiff = (new Date() - new Date(h.created_at)) / (1000 * 60 * 60 * 24);\n  return daysDiff <= 7;\n});\nif (recentClaims.length >= 3) {\n  additionalScore += 20;\n  newPatterns.push({\n    pattern: 'FREQUENT_CLAIMS_7D',\n    name: '단기다수청구 (7일)',\n    score: 20,\n    description: `7일 내 ${recentClaims.length}건 청구`,\n    severity: 'HIGH'\n  });\n}\n\n// 2. 진단코드 반복 분석 (동일 진단 3회 이상)\nconst diagnosisCounts = {};\nhistory.forEach(h => {\n  const code = h.diagnosis_code;\n  diagnosisCounts[code] = (diagnosisCounts[code] || 0) + 1;\n});\nconst repeatedDiagnosis = Object.entries(diagnosisCounts)\n  .filter(([code, count]) => count >= 3);\nif (repeatedDiagnosis.length > 0) {\n  additionalScore += 15;\n  newPatterns.push({\n    pattern: 'REPEATED_DIAGNOSIS',\n    name: '진단코드 반복',\n    score: 15,\n    description: `동일 진단 반복: ${repeatedDiagnosis.map(([c,n]) => `${c}(${n}회)`).join(', ')}`,\n    severity: 'MEDIUM'\n  });\n}\n\n// 3. 병원 집중도 분석 (80% 이상 한 병원)\nconst totalClaims = hospitalPattern.reduce((sum, h) => sum + parseInt(h.claim_count), 0);\nconst maxHospital = hospitalPattern[0];\nif (maxHospital && totalClaims > 0) {\n  const concentration = (parseInt(maxHospital.claim_count) / totalClaims) * 100;\n  if (concentration >= 80) {\n    additionalScore += 15;\n    newPatterns.push({\n      pattern: 'HOSPITAL_CONCENTRATION',\n      name: '병원 집중도',\n      score: 15,\n      description: `${maxHospital.hospital_name}에 ${concentration.toFixed(1)}% 집중`,\n      severity: 'MEDIUM'\n    });\n  }\n}\n\n// 4. 금액 급증 분석\nconst avgAmount = history.length > 0 \n  ? history.reduce((sum, h) => sum + parseFloat(h.total_medical_expense || 0), 0) / history.length\n  : 0;\nif (avgAmount > 0 && claim.total_medical_expense > avgAmount * 3) {\n  additionalScore += 25;\n  newPatterns.push({\n    pattern: 'AMOUNT_SPIKE',\n    name: '금액 급증',\n    score: 25,\n    description: `평균(${Math.round(avgAmount).toLocaleString()}원)의 ${(claim.total_medical_expense / avgAmount).toFixed(1)}배`,\n    severity: 'HIGH'\n  });\n}\n\n// 5. 연속 입원 패턴\nlet consecutiveAdmissions = 0;\nfor (let i = 0; i < history.length - 1; i++) {\n  const curr = new Date(history[i].treatment_start_date);\n  const next = new Date(history[i + 1].treatment_start_date);\n  const daysDiff = (curr - next) / (1000 * 60 * 60 * 24);\n  if (daysDiff <= 14) consecutiveAdmissions++;\n}\nif (consecutiveAdmissions >= 3) {\n  additionalScore += 15;\n  newPatterns.push({\n    pattern: 'CONSECUTIVE_ADMISSIONS',\n    name: '연속 입원',\n    score: 15,\n    description: `14일 간격 이내 연속 ${consecutiveAdmissions + 1}회 입원`,\n    severity: 'MEDIUM'\n  });\n}\n\n// 최종 점수 계산\nconst originalScore = claim.fraud_score || 0;\nconst totalScore = Math.min(100, originalScore + additionalScore);\n\n// 위험 등급 재산정\nlet riskLevel = 'LOW';\nlet recommendedAction = 'APPROVE';\nif (totalScore >= 76) {\n  riskLevel = 'CRITICAL';\n  recommendedAction = 'REJECT';\n} else if (totalScore >= 51) {\n  riskLevel = 'HIGH';\n  recommendedAction = 'INVESTIGATE';\n} else if (totalScore >= 31) {\n  riskLevel = 'MEDIUM';\n  recommendedAction = 'REVIEW';\n}\n\nreturn {\n  claimId: claim.id,\n  claimNumber: claim.claim_number,\n  customerName: claim.customer_name,\n  originalScore: originalScore,\n  additionalScore: additionalScore,\n  totalScore: totalScore,\n  riskLevel: riskLevel,\n  recommendedAction: recommendedAction,\n  newPatterns: newPatterns,\n  historyCount: history.length,\n  hospitalCount: hospitalPattern.length,\n  analyzedAt: new Date().toISOString()\n};"
+      },
+      "id": "analyze-patterns",
+      "name": "🔍 사기 패턴 심층 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "score-changed",
+              "leftValue": "={{ $json.additionalScore }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-score-changed",
+      "name": "🔀 점수 변경?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1760, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE claims \nSET \n  fraud_score = {{ $json.totalScore }},\n  fraud_risk_level = '{{ $json.riskLevel }}',\n  updated_at = NOW()\nWHERE id = {{ $json.claimId }}",
+        "options": {}
+      },
+      "id": "update-fraud-score",
+      "name": "💾 사기점수 업데이트",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1980, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO fraud_detection_results \n  (claim_id, total_score, risk_level, detected_patterns, recommended_action, analyzed_at)\nVALUES \n  ({{ $json.claimId }}, {{ $json.totalScore }}, '{{ $json.riskLevel }}', \n   '{{ JSON.stringify($json.newPatterns).replace(/'/g, \"''\") }}', \n   '{{ $json.recommendedAction }}', NOW())\nON CONFLICT (claim_id) \nDO UPDATE SET\n  total_score = EXCLUDED.total_score,\n  risk_level = EXCLUDED.risk_level,\n  detected_patterns = EXCLUDED.detected_patterns,\n  recommended_action = EXCLUDED.recommended_action,\n  analyzed_at = NOW()",
+        "options": {}
+      },
+      "id": "save-detection-result",
+      "name": "💾 탐지 결과 저장",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2200, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('🔍 사기 패턴 심층 분석').item.json.riskLevel }}",
+                    "rightValue": "CRITICAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CRITICAL"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('🔍 사기 패턴 심층 분석').item.json.riskLevel }}",
+                    "rightValue": "HIGH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HIGH"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "switch-risk-level",
+      "name": "🔀 위험도 분기",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/fraud/siu-referral/{{ $('🔍 사기 패턴 심층 분석').item.json.claimId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"referralReason\": \"일일 사기 탐지 분석 결과 CRITICAL 등급\",\n  \"totalScore\": {{ $('🔍 사기 패턴 심층 분석').item.json.totalScore }},\n  \"detectedPatterns\": {{ JSON.stringify($('🔍 사기 패턴 심층 분석').item.json.newPatterns) }},\n  \"priority\": \"URGENT\",\n  \"source\": \"n8n-daily-fraud-analysis\"\n}",
+        "options": {}
+      },
+      "id": "siu-referral",
+      "name": "🚔 SIU 조사 의뢰",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-fraud-alert",
+        "text": "=🚔 *[CRITICAL] SIU 조사 의뢰*\n\n청구번호: {{ $('🔍 사기 패턴 심층 분석').item.json.claimNumber }}\n고객명: {{ $('🔍 사기 패턴 심층 분석').item.json.customerName }}\n\n🔴 사기점수: {{ $('🔍 사기 패턴 심층 분석').item.json.originalScore }} → *{{ $('🔍 사기 패턴 심층 분석').item.json.totalScore }}점* (+{{ $('🔍 사기 패턴 심층 분석').item.json.additionalScore }})\n\n*새로 탐지된 패턴:*\n{{ $('🔍 사기 패턴 심층 분석').item.json.newPatterns.map(p => '• ' + p.name + ' (+' + p.score + '점): ' + p.description).join('\\n') }}\n\n⚠️ 즉시 SIU팀 조사 착수 필요\n@here @siu-team",
+        "otherOptions": {}
+      },
+      "id": "slack-critical",
+      "name": "📱 Slack (CRITICAL)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2860, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-fraud-alert",
+        "text": "=🚨 *[HIGH] 고위험 청구 감지*\n\n청구번호: {{ $('🔍 사기 패턴 심층 분석').item.json.claimNumber }}\n고객명: {{ $('🔍 사기 패턴 심층 분석').item.json.customerName }}\n\n🔴 사기점수: {{ $('🔍 사기 패턴 심층 분석').item.json.originalScore }} → *{{ $('🔍 사기 패턴 심층 분석').item.json.totalScore }}점* (+{{ $('🔍 사기 패턴 심층 분석').item.json.additionalScore }})\n\n*새로 탐지된 패턴:*\n{{ $('🔍 사기 패턴 심층 분석').item.json.newPatterns.map(p => '• ' + p.name + ' (+' + p.score + '점): ' + p.description).join('\\n') }}\n\n부장급 이상 검토 필요",
+        "otherOptions": {}
+      },
+      "id": "slack-high",
+      "name": "📱 Slack (HIGH)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2640, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "loopScoped": false
+      },
+      "id": "loop-back",
+      "name": "🔄 다음 배치",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2860, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(*) as total_analyzed,\n  COUNT(CASE WHEN fraud_risk_level = 'CRITICAL' THEN 1 END) as critical_count,\n  COUNT(CASE WHEN fraud_risk_level = 'HIGH' THEN 1 END) as high_count,\n  COUNT(CASE WHEN fraud_risk_level = 'MEDIUM' THEN 1 END) as medium_count,\n  COUNT(CASE WHEN fraud_risk_level = 'LOW' THEN 1 END) as low_count,\n  AVG(fraud_score) as avg_score,\n  MAX(fraud_score) as max_score\nFROM claims\nWHERE created_at >= NOW() - INTERVAL '24 hours'",
+        "options": {}
+      },
+      "id": "get-daily-stats",
+      "name": "📊 일일 통계 집계",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [3080, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  hospital_name,\n  COUNT(*) as claim_count,\n  AVG(fraud_score) as avg_fraud_score,\n  SUM(total_medical_expense) as total_amount\nFROM claims\nWHERE created_at >= NOW() - INTERVAL '30 days'\n  AND fraud_score >= 50\nGROUP BY hospital_name\nHAVING COUNT(*) >= 3\nORDER BY avg_fraud_score DESC\nLIMIT 10",
+        "options": {}
+      },
+      "id": "get-suspicious-hospitals",
+      "name": "🏥 의심 병원 분석",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [3080, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-db",
+          "name": "InsurTech DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-report",
+      "name": "🔗 리포트 데이터 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3300, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 일일 사기 탐지 리포트 생성\nconst stats = $('📊 일일 통계 집계').first().json;\nconst hospitals = $('🏥 의심 병원 분석').all().map(i => i.json);\nconst today = new Date().toLocaleDateString('ko-KR');\n\nconst report = {\n  reportDate: today,\n  generatedAt: new Date().toISOString(),\n  summary: {\n    totalAnalyzed: parseInt(stats.total_analyzed) || 0,\n    criticalCount: parseInt(stats.critical_count) || 0,\n    highCount: parseInt(stats.high_count) || 0,\n    mediumCount: parseInt(stats.medium_count) || 0,\n    lowCount: parseInt(stats.low_count) || 0,\n    avgScore: parseFloat(stats.avg_score)?.toFixed(1) || '0',\n    maxScore: parseInt(stats.max_score) || 0\n  },\n  riskDistribution: {\n    critical: ((parseInt(stats.critical_count) || 0) / (parseInt(stats.total_analyzed) || 1) * 100).toFixed(1) + '%',\n    high: ((parseInt(stats.high_count) || 0) / (parseInt(stats.total_analyzed) || 1) * 100).toFixed(1) + '%',\n    medium: ((parseInt(stats.medium_count) || 0) / (parseInt(stats.total_analyzed) || 1) * 100).toFixed(1) + '%',\n    low: ((parseInt(stats.low_count) || 0) / (parseInt(stats.total_analyzed) || 1) * 100).toFixed(1) + '%'\n  },\n  suspiciousHospitals: hospitals.map(h => ({\n    name: h.hospital_name,\n    claimCount: parseInt(h.claim_count),\n    avgFraudScore: parseFloat(h.avg_fraud_score).toFixed(1),\n    totalAmount: parseInt(h.total_amount).toLocaleString() + '원'\n  })),\n  alerts: []\n};\n\n// 경고 생성\nif (report.summary.criticalCount > 0) {\n  report.alerts.push(`🚨 CRITICAL 등급 ${report.summary.criticalCount}건 - 즉시 SIU 검토 필요`);\n}\nif (report.summary.highCount >= 5) {\n  report.alerts.push(`⚠️ HIGH 등급 ${report.summary.highCount}건 - 부장급 검토 권장`);\n}\nif (parseFloat(stats.avg_score) > 40) {\n  report.alerts.push(`📈 평균 사기점수 ${stats.avg_score}점 - 전반적 위험도 상승`);\n}\nif (hospitals.length >= 3) {\n  report.alerts.push(`🏥 의심 병원 ${hospitals.length}곳 탐지 - 네트워크 분석 권장`);\n}\n\nreturn report;"
+      },
+      "id": "generate-report",
+      "name": "📝 일일 리포트 생성",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3520, 400]
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-fraud-report",
+        "text": "=📊 *일일 사기 탐지 리포트* ({{ $json.reportDate }})\n\n━━━━━━━━━━━━━━━━━━━━━━\n📈 *분석 요약*\n• 총 분석 건수: {{ $json.summary.totalAnalyzed }}건\n• 평균 사기점수: {{ $json.summary.avgScore }}점\n• 최고 사기점수: {{ $json.summary.maxScore }}점\n\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 *위험도 분포*\n🔴 CRITICAL: {{ $json.summary.criticalCount }}건 ({{ $json.riskDistribution.critical }})\n🟠 HIGH: {{ $json.summary.highCount }}건 ({{ $json.riskDistribution.high }})\n🟡 MEDIUM: {{ $json.summary.mediumCount }}건 ({{ $json.riskDistribution.medium }})\n🟢 LOW: {{ $json.summary.lowCount }}건 ({{ $json.riskDistribution.low }})\n\n━━━━━━━━━━━━━━━━━━━━━━\n🏥 *의심 병원 TOP 5*\n{{ $json.suspiciousHospitals.slice(0,5).map((h, i) => (i+1) + '. ' + h.name + ' - 평균 ' + h.avgFraudScore + '점 (' + h.claimCount + '건)').join('\\n') || '없음' }}\n\n{{ $json.alerts.length > 0 ? '━━━━━━━━━━━━━━━━━━━━━━\\n⚠️ *경고*\\n' + $json.alerts.join('\\n') : '' }}",
+        "otherOptions": {}
+      },
+      "id": "slack-daily-report",
+      "name": "📱 Slack 일일 리포트",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [3740, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "fraud-detection@insurtech.co.kr",
+        "toEmail": "siu-team@insurtech.co.kr, risk-management@insurtech.co.kr",
+        "subject": "=[InsurTech] 일일 사기 탐지 리포트 - {{ $json.reportDate }}",
+        "emailType": "html",
+        "html": "=<h2>📊 일일 사기 탐지 리포트</h2>\n<p>날짜: {{ $json.reportDate }}</p>\n<hr>\n\n<h3>📈 분석 요약</h3>\n<table border=\"1\" cellpadding=\"8\" style=\"border-collapse: collapse;\">\n<tr><td>총 분석 건수</td><td><strong>{{ $json.summary.totalAnalyzed }}건</strong></td></tr>\n<tr><td>평균 사기점수</td><td>{{ $json.summary.avgScore }}점</td></tr>\n<tr><td>최고 사기점수</td><td>{{ $json.summary.maxScore }}점</td></tr>\n</table>\n\n<h3>🎯 위험도 분포</h3>\n<table border=\"1\" cellpadding=\"8\" style=\"border-collapse: collapse;\">\n<tr style=\"background-color: #ffcccc;\"><td>🔴 CRITICAL</td><td>{{ $json.summary.criticalCount }}건</td><td>{{ $json.riskDistribution.critical }}</td></tr>\n<tr style=\"background-color: #ffe6cc;\"><td>🟠 HIGH</td><td>{{ $json.summary.highCount }}건</td><td>{{ $json.riskDistribution.high }}</td></tr>\n<tr style=\"background-color: #ffffcc;\"><td>🟡 MEDIUM</td><td>{{ $json.summary.mediumCount }}건</td><td>{{ $json.riskDistribution.medium }}</td></tr>\n<tr style=\"background-color: #ccffcc;\"><td>🟢 LOW</td><td>{{ $json.summary.lowCount }}건</td><td>{{ $json.riskDistribution.low }}</td></tr>\n</table>\n\n<h3>🏥 의심 병원 (최근 30일)</h3>\n<table border=\"1\" cellpadding=\"8\" style=\"border-collapse: collapse;\">\n<tr><th>순위</th><th>병원명</th><th>청구 건수</th><th>평균 사기점수</th><th>총 청구액</th></tr>\n{{ $json.suspiciousHospitals.map((h, i) => '<tr><td>' + (i+1) + '</td><td>' + h.name + '</td><td>' + h.claimCount + '건</td><td>' + h.avgFraudScore + '점</td><td>' + h.totalAmount + '</td></tr>').join('') }}\n</table>\n\n{{ $json.alerts.length > 0 ? '<h3>⚠️ 경고</h3><ul>' + $json.alerts.map(a => '<li>' + a + '</li>').join('') + '</ul>' : '' }}\n\n<hr>\n<p style=\"color: gray;\">이 리포트는 자동 생성되었습니다. (생성 시각: {{ $json.generatedAt }})</p>",
+        "options": {}
+      },
+      "id": "email-daily-report",
+      "name": "📧 이메일 리포트",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3740, 500],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-config",
+          "name": "SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "fraud:daily-report:{{ new Date().toISOString().split('T')[0] }}",
+        "value": "={{ JSON.stringify($json) }}",
+        "expire": true,
+        "ttl": 604800
+      },
+      "id": "cache-report",
+      "name": "💾 Redis 캐시 저장",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [3960, 400],
+      "credentials": {
+        "redis": {
+          "id": "redis-cache",
+          "name": "InsurTech Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"entityType\": \"FRAUD_ANALYSIS\",\n  \"entityId\": 0,\n  \"action\": \"DAILY_ANALYSIS\",\n  \"userId\": 1,\n  \"details\": {\n    \"source\": \"n8n-scheduled-workflow\",\n    \"reportDate\": \"{{ $('📝 일일 리포트 생성').item.json.reportDate }}\",\n    \"totalAnalyzed\": {{ $('📝 일일 리포트 생성').item.json.summary.totalAnalyzed }},\n    \"criticalCount\": {{ $('📝 일일 리포트 생성').item.json.summary.criticalCount }},\n    \"highCount\": {{ $('📝 일일 리포트 생성').item.json.summary.highCount }}\n  }\n}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "📝 감사 로그",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4180, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "⏰ 매일 02:00 실행": {
+      "main": [
+        [
+          {
+            "node": "🔐 시스템 로그인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 수동 분석 트리거": {
+      "main": [
+        [
+          {
+            "node": "🔐 시스템 로그인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔐 시스템 로그인": {
+      "main": [
+        [
+          {
+            "node": "📊 최근 24시간 청구 조회",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🔴 고위험 청구 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 최근 24시간 청구 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 청구 데이터 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔴 고위험 청구 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 청구 데이터 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔗 청구 데이터 병합": {
+      "main": [
+        [
+          {
+            "node": "📦 10건씩 배치 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 10건씩 배치 처리": {
+      "main": [
+        [
+          {
+            "node": "📜 고객 청구 이력 조회",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🏥 병원 이용 패턴 조회",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📊 일일 통계 집계",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🏥 의심 병원 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📜 고객 청구 이력 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 패턴 데이터 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🏥 병원 이용 패턴 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 패턴 데이터 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔗 패턴 데이터 병합": {
+      "main": [
+        [
+          {
+            "node": "🔍 사기 패턴 심층 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 사기 패턴 심층 분석": {
+      "main": [
+        [
+          {
+            "node": "🔀 점수 변경?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 점수 변경?": {
+      "main": [
+        [
+          {
+            "node": "💾 사기점수 업데이트",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔄 다음 배치",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 사기점수 업데이트": {
+      "main": [
+        [
+          {
+            "node": "💾 탐지 결과 저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 탐지 결과 저장": {
+      "main": [
+        [
+          {
+            "node": "🔀 위험도 분기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 위험도 분기": {
+      "main": [
+        [
+          {
+            "node": "🚔 SIU 조사 의뢰",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📱 Slack (HIGH)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔄 다음 배치",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚔 SIU 조사 의뢰": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack (CRITICAL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (CRITICAL)": {
+      "main": [
+        [
+          {
+            "node": "🔄 다음 배치",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack (HIGH)": {
+      "main": [
+        [
+          {
+            "node": "🔄 다음 배치",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 다음 배치": {
+      "main": [
+        [
+          {
+            "node": "📜 고객 청구 이력 조회",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🏥 병원 이용 패턴 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 일일 통계 집계": {
+      "main": [
+        [
+          {
+            "node": "🔗 리포트 데이터 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🏥 의심 병원 분석": {
+      "main": [
+        [
+          {
+            "node": "🔗 리포트 데이터 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔗 리포트 데이터 병합": {
+      "main": [
+        [
+          {
+            "node": "📝 일일 리포트 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 일일 리포트 생성": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack 일일 리포트",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📧 이메일 리포트",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "💾 Redis 캐시 저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 Redis 캐시 저장": {
+      "main": [
+        [
+          {
+            "node": "📝 감사 로그",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3",
+  "meta": {
+    "instanceId": "insurtech-n8n"
+  },
+  "tags": [
+    {
+      "name": "사기탐지",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "스케줄",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

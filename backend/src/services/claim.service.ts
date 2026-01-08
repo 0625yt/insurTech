@@ -220,6 +220,7 @@ export class ClaimService {
       // 결과 반환
       return {
         success: true,
+        claim_id: claimId,
         claim_number: claimNumber,
         status: reviewDecision.status,
         customer: {

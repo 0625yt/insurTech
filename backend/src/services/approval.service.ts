@@ -66,7 +66,7 @@ export class ApprovalService {
 
       if (claimResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return { success: false, error: '청구를 찾을 수 없습니다.' };
+        return { success: false, message: '청구를 찾을 수 없습니다.' };
       }
 
       const claim = claimResult.rows[0];
@@ -79,7 +79,7 @@ export class ApprovalService {
 
       if (existingResult.rows.length > 0) {
         await client.query('ROLLBACK');
-        return { success: false, error: '이미 결재가 진행 중입니다.' };
+        return { success: false, message: '이미 결재가 진행 중입니다.' };
       }
 
       // 결재 템플릿 찾기
@@ -87,7 +87,7 @@ export class ApprovalService {
 
       if (!template) {
         await client.query('ROLLBACK');
-        return { success: false, error: '적용 가능한 결재 라인이 없습니다.' };
+        return { success: false, message: '적용 가능한 결재 라인이 없습니다.' };
       }
 
       const approvalSteps = template.approval_steps;
@@ -135,7 +135,7 @@ export class ApprovalService {
 
       if (approvers.length === 0) {
         await client.query('ROLLBACK');
-        return { success: false, error: `${firstStep.role_code} 역할의 결재자가 없습니다.` };
+        return { success: false, message: `${firstStep.role_code} 역할의 결재자가 없습니다.` };
       }
 
       // 첫 번째 결재자에게 배정
@@ -182,7 +182,7 @@ export class ApprovalService {
     } catch (error) {
       await client.query('ROLLBACK');
       logger.error('Start approval process error:', error);
-      return { success: false, error: '결재 프로세스 시작 중 오류가 발생했습니다.' };
+      return { success: false, message: '결재 프로세스 시작 중 오류가 발생했습니다.' };
     } finally {
       client.release();
     }

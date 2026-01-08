@@ -1,0 +1,234 @@
+{
+  "name": "🧪 테스트 - 기본 동작 확인",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "▶️ 수동 실행",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 테스트용 청구 데이터 생성\nconst testClaim = {\n  id: 1,\n  claim_number: 'CLM-2024-000001',\n  policy_number: 'POL-2024-001',\n  customer_name: '홍길동',\n  claim_type: 'HOSPITALIZATION',\n  diagnosis_code: 'K35.0',\n  diagnosis_name: '급성 충수염',\n  hospital_name: '서울대학교병원',\n  treatment_start_date: '2024-01-10',\n  treatment_end_date: '2024-01-15',\n  hospitalization_days: 5,\n  total_medical_expense: 2500000,\n  insured_expense: 2000000,\n  uninsured_expense: 500000,\n  created_at: new Date().toISOString()\n};\n\nreturn {\n  success: true,\n  message: '테스트 청구 데이터 생성 완료',\n  claim: testClaim\n};"
+      },
+      "id": "generate-test-data",
+      "name": "📝 테스트 데이터 생성",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 정책 유효성 검증 시뮬레이션\nconst claim = $input.first().json.claim;\n\nconst policy = {\n  id: 1,\n  policy_number: claim.policy_number,\n  product_code: 'MED-001',\n  product_name: '무배당 건강보험',\n  status: 'ACTIVE',\n  coverage_start_date: '2023-01-01',\n  coverage_end_date: '2033-12-31',\n  customer: {\n    id: 1,\n    name: claim.customer_name,\n    email: 'hong@example.com',\n    risk_grade: 'NORMAL'\n  }\n};\n\n// 유효성 검증\nconst today = new Date();\nconst coverageStart = new Date(policy.coverage_start_date);\nconst coverageEnd = new Date(policy.coverage_end_date);\nconst treatmentDate = new Date(claim.treatment_start_date);\n\nconst isValid = policy.status === 'ACTIVE' && \n               treatmentDate >= coverageStart && \n               treatmentDate <= coverageEnd;\n\nreturn {\n  isValid: isValid,\n  policy: policy,\n  claim: claim,\n  issues: isValid ? [] : ['보장기간 외 청구']\n};"
+      },
+      "id": "validate-policy",
+      "name": "🔍 정책 유효성 검증",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "🔀 유효성 체크",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 담보 분석 시뮬레이션\nconst data = $input.first().json;\nconst claim = data.claim;\n\nconst coverages = [\n  {\n    id: 1,\n    name: '입원일당',\n    code: 'HOS-DAILY',\n    type: 'FIXED',\n    daily_amount: 50000,\n    max_days: 180\n  },\n  {\n    id: 2,\n    name: '입원의료비',\n    code: 'HOS-MEDICAL',\n    type: 'REAL_LOSS',\n    insured_amount: 5000000,\n    deductible_rate: 0.1,\n    payout_rate: 0.9\n  }\n];\n\nconst breakdown = [];\nlet totalApproved = 0;\n\n// 입원일당 계산\nconst dailyCov = coverages.find(c => c.code === 'HOS-DAILY');\nif (dailyCov && claim.hospitalization_days) {\n  const days = Math.min(claim.hospitalization_days, dailyCov.max_days);\n  const amount = dailyCov.daily_amount * days;\n  breakdown.push({\n    coverage: dailyCov.name,\n    calculation: `${dailyCov.daily_amount.toLocaleString()}원 × ${days}일`,\n    approved: amount\n  });\n  totalApproved += amount;\n}\n\n// 입원의료비 계산\nconst medCov = coverages.find(c => c.code === 'HOS-MEDICAL');\nif (medCov && claim.insured_expense) {\n  const afterDeductible = claim.insured_expense * (1 - medCov.deductible_rate);\n  const amount = Math.min(afterDeductible * medCov.payout_rate, medCov.insured_amount);\n  breakdown.push({\n    coverage: medCov.name,\n    calculation: `${claim.insured_expense.toLocaleString()}원 × 90% × 90%`,\n    approved: Math.round(amount)\n  });\n  totalApproved += Math.round(amount);\n}\n\nreturn {\n  claim: claim,\n  policy: data.policy,\n  coverages: coverages,\n  breakdown: breakdown,\n  totalApproved: totalApproved,\n  totalRejected: claim.total_medical_expense - totalApproved\n};"
+      },
+      "id": "analyze-coverage",
+      "name": "📊 담보 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI 심사 시뮬레이션 (GPT 없이)\nconst data = $input.first().json;\n\n// 랜덤 신뢰도 생성 (0.7 ~ 0.95)\nconst confidence = 0.7 + Math.random() * 0.25;\n\n// 승인/거절/검토 결정\nlet recommendation = 'APPROVE';\nif (data.totalApproved < data.claim.total_medical_expense * 0.3) {\n  recommendation = 'REVIEW';\n}\n\nconst aiResults = [\n  {\n    model: 'GPT-4o (시뮬레이션)',\n    recommendation: recommendation,\n    confidence: confidence,\n    reasoning: '청구 내역이 약관 기준에 부합합니다.'\n  },\n  {\n    model: 'Claude (시뮬레이션)',\n    recommendation: recommendation,\n    confidence: confidence + 0.02,\n    reasoning: '담보 적용이 적절합니다.'\n  },\n  {\n    model: 'Gemini (시뮬레이션)',\n    recommendation: recommendation,\n    confidence: confidence - 0.01,\n    reasoning: '정상적인 청구로 판단됩니다.'\n  }\n];\n\nreturn {\n  ...data,\n  aiResults: aiResults,\n  finalRecommendation: recommendation,\n  avgConfidence: Math.round((confidence + 0.01) * 100) / 100\n};"
+      },
+      "id": "ai-simulation",
+      "name": "🤖 AI 심사 (시뮬레이션)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 사기 탐지 시뮬레이션\nconst data = $input.first().json;\nconst claim = data.claim;\n\nlet fraudScore = 0;\nconst patterns = [];\n\n// 패턴 1: 고액 청구 체크\nif (claim.total_medical_expense > 3000000) {\n  fraudScore += 10;\n  patterns.push({\n    name: '고액청구',\n    score: 10,\n    description: `청구액 ${claim.total_medical_expense.toLocaleString()}원`\n  });\n}\n\n// 패턴 2: 입원일수 체크\nif (claim.hospitalization_days > 14) {\n  fraudScore += 5;\n  patterns.push({\n    name: '장기입원',\n    score: 5,\n    description: `${claim.hospitalization_days}일 입원`\n  });\n}\n\n// 위험도 결정\nlet riskLevel = 'LOW';\nlet action = 'APPROVE';\n\nif (fraudScore >= 50) {\n  riskLevel = 'HIGH';\n  action = 'INVESTIGATE';\n} else if (fraudScore >= 30) {\n  riskLevel = 'MEDIUM';\n  action = 'REVIEW';\n}\n\nreturn {\n  ...data,\n  fraudDetection: {\n    totalScore: fraudScore,\n    riskLevel: riskLevel,\n    recommendedAction: action,\n    patterns: patterns\n  }\n};"
+      },
+      "id": "fraud-detection",
+      "name": "🚨 사기 탐지 (시뮬레이션)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 최종 결과 생성\nconst data = $input.first().json;\n\nconst result = {\n  success: true,\n  timestamp: new Date().toISOString(),\n  summary: {\n    claimNumber: data.claim.claim_number,\n    customerName: data.claim.customer_name,\n    claimType: data.claim.claim_type,\n    diagnosisName: data.claim.diagnosis_name,\n    hospitalName: data.claim.hospital_name\n  },\n  financials: {\n    totalClaimed: data.claim.total_medical_expense,\n    totalApproved: data.totalApproved,\n    totalRejected: data.totalRejected,\n    approvalRate: Math.round((data.totalApproved / data.claim.total_medical_expense) * 100) + '%'\n  },\n  aiAnalysis: {\n    recommendation: data.finalRecommendation,\n    confidence: data.avgConfidence,\n    models: data.aiResults.length\n  },\n  fraudDetection: {\n    score: data.fraudDetection.totalScore,\n    riskLevel: data.fraudDetection.riskLevel,\n    action: data.fraudDetection.recommendedAction,\n    patterns: data.fraudDetection.patterns.length\n  },\n  breakdown: data.breakdown\n};\n\nreturn result;"
+      },
+      "id": "final-result",
+      "name": "📋 최종 결과 생성",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 결과를 보기 좋게 출력\nconst result = $input.first().json;\n\nconsole.log('='.repeat(50));\nconsole.log('🏥 보험금 청구 심사 결과');\nconsole.log('='.repeat(50));\nconsole.log('');\nconsole.log('📋 청구 정보');\nconsole.log(`   청구번호: ${result.summary.claimNumber}`);\nconsole.log(`   고객명: ${result.summary.customerName}`);\nconsole.log(`   청구유형: ${result.summary.claimType}`);\nconsole.log(`   진단명: ${result.summary.diagnosisName}`);\nconsole.log(`   병원명: ${result.summary.hospitalName}`);\nconsole.log('');\nconsole.log('💰 금액 분석');\nconsole.log(`   총 청구액: ${result.financials.totalClaimed.toLocaleString()}원`);\nconsole.log(`   승인 금액: ${result.financials.totalApproved.toLocaleString()}원`);\nconsole.log(`   거절 금액: ${result.financials.totalRejected.toLocaleString()}원`);\nconsole.log(`   승인율: ${result.financials.approvalRate}`);\nconsole.log('');\nconsole.log('🤖 AI 분석');\nconsole.log(`   추천: ${result.aiAnalysis.recommendation}`);\nconsole.log(`   신뢰도: ${(result.aiAnalysis.confidence * 100).toFixed(1)}%`);\nconsole.log('');\nconsole.log('🚨 사기 탐지');\nconsole.log(`   점수: ${result.fraudDetection.score}점`);\nconsole.log(`   위험도: ${result.fraudDetection.riskLevel}`);\nconsole.log(`   권장조치: ${result.fraudDetection.action}`);\nconsole.log('');\nconsole.log('='.repeat(50));\nconsole.log('✅ 워크플로우 테스트 성공!');\nconsole.log('='.repeat(50));\n\nreturn result;"
+      },
+      "id": "output-result",
+      "name": "📤 결과 출력",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 유효성 검증 실패 처리\nconst data = $input.first().json;\n\nreturn {\n  success: false,\n  message: '정책 유효성 검증 실패',\n  issues: data.issues,\n  claim: data.claim\n};"
+      },
+      "id": "invalid-result",
+      "name": "❌ 검증 실패",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "▶️ 수동 실행": {
+      "main": [
+        [
+          {
+            "node": "📝 테스트 데이터 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 테스트 데이터 생성": {
+      "main": [
+        [
+          {
+            "node": "🔍 정책 유효성 검증",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 정책 유효성 검증": {
+      "main": [
+        [
+          {
+            "node": "🔀 유효성 체크",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 유효성 체크": {
+      "main": [
+        [
+          {
+            "node": "📊 담보 분석",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 검증 실패",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 담보 분석": {
+      "main": [
+        [
+          {
+            "node": "🤖 AI 심사 (시뮬레이션)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 AI 심사 (시뮬레이션)": {
+      "main": [
+        [
+          {
+            "node": "🚨 사기 탐지 (시뮬레이션)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚨 사기 탐지 (시뮬레이션)": {
+      "main": [
+        [
+          {
+            "node": "📋 최종 결과 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 최종 결과 생성": {
+      "main": [
+        [
+          {
+            "node": "📤 결과 출력",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5",
+  "meta": {
+    "instanceId": "insurtech-n8n"
+  },
+  "tags": [
+    {
+      "name": "테스트",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

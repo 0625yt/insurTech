@@ -81,7 +81,14 @@
       "Bash(gh:*)",
       "Bash(git remote add:*)",
       "Bash(git push:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(dir:*)",
+      "Bash(tasklist:*)",
+      "Bash(set PGPASSWORD=insurtech_password_2024)",
+      "Bash(node check-db.js:*)",
+      "Bash(node -e:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 7092 -Force\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 5; curl -s -X POST http://localhost:3000/api/auth/login -H ''Content-Type: application/json'' -d ''{\"\"userCode\"\":\"\"EMP005\"\",\"\"password\"\":\"\"password123\"\"}''\")"
     ]
   }
 }

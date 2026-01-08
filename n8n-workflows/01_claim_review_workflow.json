@@ -1,0 +1,1324 @@
+{
+  "name": "🏥 보험금 청구 자동심사 전체 프로세스",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "claims/submit",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "📥 청구 접수 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "claim-submit-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 청구 데이터 유효성 검증\nconst claim = $input.first().json.body;\n\nconst errors = [];\n\n// 필수 필드 검증\nconst requiredFields = [\n  'policy_number', 'customer_name', 'claim_type',\n  'treatment_start_date', 'treatment_end_date',\n  'hospital_name', 'diagnosis_code', 'diagnosis_name',\n  'total_medical_expense', 'insured_expense', 'uninsured_expense'\n];\n\nrequiredFields.forEach(field => {\n  if (!claim[field]) {\n    errors.push(`필수 필드 누락: ${field}`);\n  }\n});\n\n// claim_type 유효성\nconst validTypes = ['HOSPITALIZATION', 'OUTPATIENT', 'SURGERY', 'DIAGNOSIS'];\nif (claim.claim_type && !validTypes.includes(claim.claim_type)) {\n  errors.push(`유효하지 않은 청구유형: ${claim.claim_type}`);\n}\n\n// 날짜 형식 검증\nconst dateRegex = /^\\d{4}-\\d{2}-\\d{2}$/;\nif (claim.treatment_start_date && !dateRegex.test(claim.treatment_start_date)) {\n  errors.push('치료시작일 형식 오류 (YYYY-MM-DD)');\n}\nif (claim.treatment_end_date && !dateRegex.test(claim.treatment_end_date)) {\n  errors.push('치료종료일 형식 오류 (YYYY-MM-DD)');\n}\n\n// 금액 검증\nif (claim.total_medical_expense < 0) {\n  errors.push('총 진료비는 0 이상이어야 합니다');\n}\n\nreturn {\n  isValid: errors.length === 0,\n  errors: errors,\n  claim: claim,\n  receivedAt: new Date().toISOString()\n};"
+      },
+      "id": "validate-input",
+      "name": "✅ 입력 데이터 검증",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "🔀 유효성 체크",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/auth/login",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "system"
+            },
+            {
+              "name": "password",
+              "value": "system123!"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "auth-login",
+      "name": "🔐 시스템 로그인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/policies/{{ $('✅ 입력 데이터 검증').item.json.claim.policy_number }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-policy",
+      "name": "📋 보험증권 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "policy-valid",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-policy-exists",
+      "name": "🔀 증권 존재 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 보험 정책 유효성 상세 검증\nconst policy = $('📋 보험증권 조회').item.json.data;\nconst claim = $('✅ 입력 데이터 검증').item.json.claim;\n\nconst today = new Date();\nconst coverageStart = new Date(policy.coverage_start_date);\nconst coverageEnd = new Date(policy.coverage_end_date);\nconst treatmentStart = new Date(claim.treatment_start_date);\n\nconst issues = [];\nlet isValid = true;\n\n// 1. 보장기간 확인\nif (treatmentStart < coverageStart || treatmentStart > coverageEnd) {\n  issues.push('치료일이 보장기간 외');\n  isValid = false;\n}\n\n// 2. 납입상태 확인\nif (policy.status !== 'ACTIVE') {\n  issues.push(`증권 상태 이상: ${policy.status}`);\n  isValid = false;\n}\n\n// 3. 면책기간 확인 (계약일로부터 90일)\nconst exemptionEndDate = new Date(coverageStart);\nexemptionEndDate.setDate(exemptionEndDate.getDate() + 90);\nconst isInExemptionPeriod = treatmentStart < exemptionEndDate;\n\n// 4. 감액기간 확인 (계약일로부터 1년)\nconst reductionEndDate = new Date(coverageStart);\nreductionEndDate.setFullYear(reductionEndDate.getFullYear() + 1);\nconst isInReductionPeriod = treatmentStart < reductionEndDate;\nconst reductionRate = isInReductionPeriod ? 0.5 : 1.0; // 50% 감액\n\nif (isInExemptionPeriod) {\n  issues.push('면책기간 내 청구 (90일)');\n}\n\nreturn {\n  isValid: isValid,\n  issues: issues,\n  policy: policy,\n  claim: claim,\n  isInExemptionPeriod: isInExemptionPeriod,\n  isInReductionPeriod: isInReductionPeriod,\n  reductionRate: reductionRate,\n  customer: policy.customer\n};"
+      },
+      "id": "validate-policy",
+      "name": "🔍 정책 유효성 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "policy-valid-detail",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-policy-valid",
+      "name": "🔀 정책 유효?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, 100]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/policies/{{ $('🔍 정책 유효성 분석').item.json.policy.id }}/coverages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-coverages",
+      "name": "💰 담보 목록 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://insurtech-api:3000/api/policies/terms/{{ $('🔍 정책 유효성 분석').item.json.policy.product_code }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-terms",
+      "name": "📖 약관 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "merge-policy-data",
+      "name": "🔗 정책 데이터 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1980, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 담보 분석 및 지급액 계산\nconst coverages = $('💰 담보 목록 조회').item.json.data || [];\nconst terms = $('📖 약관 조회').item.json.data || [];\nconst policyData = $('🔍 정책 유효성 분석').item.json;\nconst claim = policyData.claim;\nconst reductionRate = policyData.reductionRate;\n\nconst breakdown = [];\nlet totalApproved = 0;\nlet totalRejected = 0;\n\n// 청구유형별 적용 담보 필터링\nconst applicableCoverages = coverages.filter(cov => {\n  if (claim.claim_type === 'HOSPITALIZATION') {\n    return cov.code.includes('HOS') || cov.code.includes('입원');\n  } else if (claim.claim_type === 'SURGERY') {\n    return cov.code.includes('SUR') || cov.code.includes('수술');\n  } else if (claim.claim_type === 'OUTPATIENT') {\n    return cov.code.includes('OUT') || cov.code.includes('통원');\n  } else if (claim.claim_type === 'DIAGNOSIS') {\n    return cov.code.includes('DIA') || cov.code.includes('진단');\n  }\n  return true;\n});\n\napplicableCoverages.forEach(coverage => {\n  let claimedAmount = 0;\n  let approvedAmount = 0;\n  let rejectedAmount = 0;\n  let calculation = '';\n  let rejectionReason = null;\n\n  // 담보 유형별 계산\n  if (coverage.type === 'REAL_LOSS') {\n    // 실손 담보: 실제 비용 기준\n    claimedAmount = claim.insured_expense;\n    const deductible = coverage.deductible_amount || 0;\n    const deductibleRate = coverage.deductible_rate || 0;\n    const payoutRate = coverage.payout_rate || 1.0;\n    \n    // 본인부담금 공제\n    const afterDeductible = Math.max(0, claimedAmount - deductible);\n    const afterRate = afterDeductible * (1 - deductibleRate);\n    approvedAmount = Math.min(afterRate * payoutRate, coverage.insured_amount);\n    \n    // 감액기간 적용\n    approvedAmount = approvedAmount * reductionRate;\n    \n    rejectedAmount = claimedAmount - approvedAmount;\n    calculation = `(${claimedAmount.toLocaleString()} - ${deductible.toLocaleString()}) × ${(1-deductibleRate)*100}% × ${reductionRate*100}%`;\n    \n  } else if (coverage.type === 'FIXED') {\n    // 정액 담보: 고정 금액 지급\n    claimedAmount = coverage.insured_amount;\n    \n    if (claim.claim_type === 'HOSPITALIZATION' && claim.hospitalization_days) {\n      // 입원일당\n      const maxDays = coverage.max_days || 180;\n      const actualDays = Math.min(claim.hospitalization_days, maxDays);\n      approvedAmount = coverage.daily_amount * actualDays * reductionRate;\n      calculation = `${coverage.daily_amount.toLocaleString()}/일 × ${actualDays}일 × ${reductionRate*100}%`;\n    } else if (claim.claim_type === 'SURGERY') {\n      // 수술비 (수술분류에 따라)\n      const surgeryClass = claim.surgery_classification || 3;\n      const classMultiplier = [2.0, 1.5, 1.0, 0.7, 0.5][surgeryClass - 1] || 1.0;\n      approvedAmount = coverage.insured_amount * classMultiplier * reductionRate;\n      calculation = `${coverage.insured_amount.toLocaleString()} × ${classMultiplier} (${surgeryClass}종) × ${reductionRate*100}%`;\n    } else {\n      approvedAmount = coverage.insured_amount * reductionRate;\n      calculation = `${coverage.insured_amount.toLocaleString()} × ${reductionRate*100}%`;\n    }\n    \n    rejectedAmount = claimedAmount - approvedAmount;\n  }\n\n  // 약관 참조 찾기\n  const relevantTerm = terms.find(t => \n    t.coverage_code === coverage.code || \n    t.article_title?.includes(coverage.name)\n  );\n\n  breakdown.push({\n    coverageId: coverage.id,\n    coverageName: coverage.name,\n    coverageCode: coverage.code,\n    coverageType: coverage.type,\n    claimedAmount: Math.round(claimedAmount),\n    approvedAmount: Math.round(approvedAmount),\n    rejectedAmount: Math.round(rejectedAmount),\n    calculation: calculation,\n    rejectionReason: rejectionReason,\n    termReference: relevantTerm ? {\n      article: relevantTerm.article_number,\n      title: relevantTerm.article_title,\n      content: relevantTerm.content?.substring(0, 200) + '...'\n    } : null\n  });\n\n  totalApproved += approvedAmount;\n  totalRejected += rejectedAmount;\n});\n\nreturn {\n  coverages: applicableCoverages,\n  breakdown: breakdown,\n  totalApproved: Math.round(totalApproved),\n  totalRejected: Math.round(totalRejected),\n  totalClaimed: Math.round(totalApproved + totalRejected),\n  claim: claim,\n  policy: policyData.policy,\n  reductionRate: reductionRate\n};"
+      },
+      "id": "analyze-coverages",
+      "name": "📊 담보 분석 및 계산",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 100]
+    },
+    {
+      "parameters": {},
+      "id": "split-ai",
+      "name": "⚡ AI 병렬 처리 시작",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2420, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"당신은 보험금 청구 심사 전문가입니다. 제공된 청구 정보를 분석하여 승인/거절/검토 추천을 하세요.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"청구 정보:\\n- 청구유형: {{ $json.claim.claim_type }}\\n- 진단코드: {{ $json.claim.diagnosis_code }}\\n- 진단명: {{ $json.claim.diagnosis_name }}\\n- 총 청구액: {{ $json.totalClaimed }}원\\n- 계산된 승인액: {{ $json.totalApproved }}원\\n\\n담보 분석 결과:\\n{{ JSON.stringify($json.breakdown, null, 2) }}\\n\\n위 정보를 바탕으로 다음 JSON 형식으로 응답하세요:\\n{\\n  \\\"recommendation\\\": \\\"APPROVE|REJECT|REVIEW\\\",\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"reasoning\\\": \\\"판단 근거\\\",\\n  \\\"adjustedAmount\\\": 조정된 금액 (없으면 null),\\n  \\\"flags\\\": [\\\"주의사항 목록\\\"]\\n}\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1000\n}",
+        "options": {}
+      },
+      "id": "ai-openai",
+      "name": "🤖 GPT-4o 심사",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openai-api",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $credentials.httpHeaderAuth.value }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 1000,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"당신은 보험금 청구 심사 전문가입니다.\\n\\n청구 정보:\\n- 청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}\\n- 진단코드: {{ $('📊 담보 분석 및 계산').item.json.claim.diagnosis_code }}\\n- 진단명: {{ $('📊 담보 분석 및 계산').item.json.claim.diagnosis_name }}\\n- 총 청구액: {{ $('📊 담보 분석 및 계산').item.json.totalClaimed }}원\\n- 계산된 승인액: {{ $('📊 담보 분석 및 계산').item.json.totalApproved }}원\\n\\n담보 분석 결과:\\n{{ JSON.stringify($('📊 담보 분석 및 계산').item.json.breakdown, null, 2) }}\\n\\n위 정보를 바탕으로 다음 JSON 형식으로 응답하세요:\\n{\\n  \\\"recommendation\\\": \\\"APPROVE|REJECT|REVIEW\\\",\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"reasoning\\\": \\\"판단 근거\\\",\\n  \\\"adjustedAmount\\\": 조정된 금액 (없으면 null),\\n  \\\"flags\\\": [\\\"주의사항 목록\\\"]\\n}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "ai-claude",
+      "name": "🤖 Claude 심사",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "anthropic-api",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"당신은 보험금 청구 심사 전문가입니다.\\n\\n청구 정보:\\n- 청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}\\n- 진단코드: {{ $('📊 담보 분석 및 계산').item.json.claim.diagnosis_code }}\\n- 진단명: {{ $('📊 담보 분석 및 계산').item.json.claim.diagnosis_name }}\\n- 총 청구액: {{ $('📊 담보 분석 및 계산').item.json.totalClaimed }}원\\n- 계산된 승인액: {{ $('📊 담보 분석 및 계산').item.json.totalApproved }}원\\n\\n담보 분석 결과:\\n{{ JSON.stringify($('📊 담보 분석 및 계산').item.json.breakdown, null, 2) }}\\n\\n위 정보를 바탕으로 다음 JSON 형식으로 응답하세요:\\n{\\n  \\\"recommendation\\\": \\\"APPROVE|REJECT|REVIEW\\\",\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"reasoning\\\": \\\"판단 근거\\\",\\n  \\\"adjustedAmount\\\": 조정된 금액 (없으면 null),\\n  \\\"flags\\\": [\\\"주의사항 목록\\\"]\\n}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.3,\n    \"maxOutputTokens\": 1000\n  }\n}",
+        "options": {}
+      },
+      "id": "ai-gemini",
+      "name": "🤖 Gemini 심사",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 300],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "google-api",
+          "name": "Google API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-ai-results",
+      "name": "🔗 AI 결과 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2860, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI 결과 파싱 및 앙상블 투표\nconst items = $input.all();\nconst coverageData = $('📊 담보 분석 및 계산').item.json;\n\nconst results = [];\n\n// GPT-4o 결과 파싱\ntry {\n  const gptResponse = items[0]?.json?.choices?.[0]?.message?.content;\n  if (gptResponse) {\n    const gptResult = JSON.parse(gptResponse.replace(/```json\\n?|```/g, ''));\n    results.push({\n      model: 'GPT-4o',\n      modelCode: 'openai-gpt4o',\n      ...gptResult,\n      weight: 0.35\n    });\n  }\n} catch (e) {\n  results.push({ model: 'GPT-4o', error: e.message, recommendation: 'REVIEW', confidence: 0.5, weight: 0.35 });\n}\n\n// Claude 결과 파싱\ntry {\n  const claudeResponse = items[1]?.json?.content?.[0]?.text;\n  if (claudeResponse) {\n    const claudeResult = JSON.parse(claudeResponse.replace(/```json\\n?|```/g, ''));\n    results.push({\n      model: 'Claude-Sonnet',\n      modelCode: 'anthropic-claude',\n      ...claudeResult,\n      weight: 0.35\n    });\n  }\n} catch (e) {\n  results.push({ model: 'Claude-Sonnet', error: e.message, recommendation: 'REVIEW', confidence: 0.5, weight: 0.35 });\n}\n\n// Gemini 결과 파싱\ntry {\n  const geminiResponse = items[2]?.json?.candidates?.[0]?.content?.parts?.[0]?.text;\n  if (geminiResponse) {\n    const geminiResult = JSON.parse(geminiResponse.replace(/```json\\n?|```/g, ''));\n    results.push({\n      model: 'Gemini-Pro',\n      modelCode: 'google-gemini',\n      ...geminiResult,\n      weight: 0.30\n    });\n  }\n} catch (e) {\n  results.push({ model: 'Gemini-Pro', error: e.message, recommendation: 'REVIEW', confidence: 0.5, weight: 0.30 });\n}\n\n// 앙상블 투표\nconst votes = { APPROVE: 0, REJECT: 0, REVIEW: 0 };\nlet totalConfidence = 0;\nlet weightSum = 0;\n\nresults.forEach(r => {\n  if (r.recommendation && votes.hasOwnProperty(r.recommendation)) {\n    votes[r.recommendation] += r.weight * (r.confidence || 0.5);\n    totalConfidence += (r.confidence || 0.5) * r.weight;\n    weightSum += r.weight;\n  }\n});\n\n// 최종 추천 결정\nlet finalRecommendation = 'REVIEW';\nlet maxVote = 0;\nfor (const [rec, vote] of Object.entries(votes)) {\n  if (vote > maxVote) {\n    maxVote = vote;\n    finalRecommendation = rec;\n  }\n}\n\nconst avgConfidence = weightSum > 0 ? totalConfidence / weightSum : 0.5;\n\n// 만장일치 체크\nconst uniqueRecs = [...new Set(results.map(r => r.recommendation))];\nconst isUnanimous = uniqueRecs.length === 1;\n\nreturn {\n  modelResults: results,\n  votes: votes,\n  finalRecommendation: finalRecommendation,\n  confidenceScore: Math.round(avgConfidence * 100) / 100,\n  isUnanimous: isUnanimous,\n  coverageAnalysis: coverageData,\n  claim: coverageData.claim,\n  policy: coverageData.policy,\n  totalApproved: coverageData.totalApproved,\n  totalRejected: coverageData.totalRejected,\n  breakdown: coverageData.breakdown\n};"
+      },
+      "id": "ensemble-vote",
+      "name": "🗳️ 앙상블 투표",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 사기 탐지 패턴 분석\nconst data = $input.first().json;\nconst claim = data.claim;\nconst policy = data.policy;\n\nlet totalScore = 0;\nconst detectedPatterns = [];\n\n// 패턴 1: 단기다수청구 (시뮬레이션 - 실제로는 DB 조회 필요)\nconst recentClaimCount = Math.floor(Math.random() * 5); // 실제로는 DB에서 조회\nif (recentClaimCount >= 3) {\n  totalScore += 20;\n  detectedPatterns.push({\n    pattern: 'FREQUENT_CLAIMS',\n    name: '단기다수청구',\n    score: 20,\n    description: `최근 7일 내 ${recentClaimCount}건 청구`\n  });\n}\n\n// 패턴 2: 고액 청구\nconst avgClaimAmount = 500000; // 실제로는 DB에서 평균 조회\nif (claim.total_medical_expense > avgClaimAmount * 3) {\n  totalScore += 25;\n  detectedPatterns.push({\n    pattern: 'HIGH_AMOUNT',\n    name: '고액청구',\n    score: 25,\n    description: `평균의 ${Math.round(claim.total_medical_expense / avgClaimAmount)}배`\n  });\n}\n\n// 패턴 3: 조기 청구 (계약 후 6개월 내)\nconst contractDate = new Date(policy.coverage_start_date);\nconst treatmentDate = new Date(claim.treatment_start_date);\nconst monthsDiff = (treatmentDate - contractDate) / (1000 * 60 * 60 * 24 * 30);\nif (monthsDiff < 6) {\n  totalScore += 20;\n  detectedPatterns.push({\n    pattern: 'EARLY_CLAIM',\n    name: '조기청구',\n    score: 20,\n    description: `계약 후 ${Math.round(monthsDiff)}개월 만에 청구`\n  });\n}\n\n// 패턴 4: 주말 입원\nconst admissionDay = new Date(claim.treatment_start_date).getDay();\nif (claim.claim_type === 'HOSPITALIZATION' && (admissionDay === 5 || admissionDay === 6)) {\n  totalScore += 10;\n  detectedPatterns.push({\n    pattern: 'WEEKEND_ADMISSION',\n    name: '주말입원',\n    score: 10,\n    description: '금요일/토요일 입원'\n  });\n}\n\n// 패턴 5: 진단코드 위험도\nconst highRiskCodes = ['C', 'I21', 'I22', 'I23', 'G45']; // 암, 심근경색, 뇌졸중\nconst diagCode = claim.diagnosis_code?.toUpperCase() || '';\nif (highRiskCodes.some(code => diagCode.startsWith(code))) {\n  totalScore += 15;\n  detectedPatterns.push({\n    pattern: 'HIGH_RISK_DIAGNOSIS',\n    name: '고위험진단',\n    score: 15,\n    description: `고위험 진단코드: ${diagCode}`\n  });\n}\n\n// 위험도 레벨 결정\nlet riskLevel = 'LOW';\nlet recommendedAction = 'APPROVE';\n\nif (totalScore >= 76) {\n  riskLevel = 'CRITICAL';\n  recommendedAction = 'REJECT';\n} else if (totalScore >= 51) {\n  riskLevel = 'HIGH';\n  recommendedAction = 'INVESTIGATE';\n} else if (totalScore >= 31) {\n  riskLevel = 'MEDIUM';\n  recommendedAction = 'REVIEW';\n}\n\nreturn {\n  ...data,\n  fraudDetection: {\n    totalScore: totalScore,\n    riskLevel: riskLevel,\n    recommendedAction: recommendedAction,\n    detectedPatterns: detectedPatterns,\n    analyzedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "fraud-detection",
+      "name": "🚨 사기 탐지 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3300, 100]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "LOW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "LOW_RISK"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "MEDIUM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "MEDIUM_RISK"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "HIGH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HIGH_RISK"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "CRITICAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CRITICAL_RISK"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-risk",
+      "name": "🔀 위험도별 분기",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [3520, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/claims",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"surgery_code\": \"{{ $json.claim.surgery_code }}\",\n  \"surgery_name\": \"{{ $json.claim.surgery_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"{{ $json.finalRecommendation }}\",\n  \"ai_confidence_score\": {{ $json.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"{{ $json.fraudDetection.riskLevel }}\",\n  \"total_approved\": {{ $json.totalApproved }},\n  \"total_rejected\": {{ $json.totalRejected }},\n  \"status\": \"PENDING\"\n}",
+        "options": {}
+      },
+      "id": "save-claim-low",
+      "name": "💾 청구 저장 (LOW)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3760, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/claims",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"surgery_code\": \"{{ $json.claim.surgery_code }}\",\n  \"surgery_name\": \"{{ $json.claim.surgery_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"REVIEW\",\n  \"ai_confidence_score\": {{ $json.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"{{ $json.fraudDetection.riskLevel }}\",\n  \"total_approved\": {{ $json.totalApproved }},\n  \"total_rejected\": {{ $json.totalRejected }},\n  \"status\": \"PENDING\"\n}",
+        "options": {}
+      },
+      "id": "save-claim-medium",
+      "name": "💾 청구 저장 (MEDIUM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3760, 60],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/claims",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"surgery_code\": \"{{ $json.claim.surgery_code }}\",\n  \"surgery_name\": \"{{ $json.claim.surgery_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"INVESTIGATE\",\n  \"ai_confidence_score\": {{ $json.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"{{ $json.fraudDetection.riskLevel }}\",\n  \"total_approved\": {{ $json.totalApproved }},\n  \"total_rejected\": {{ $json.totalRejected }},\n  \"status\": \"PENDING\"\n}",
+        "options": {}
+      },
+      "id": "save-claim-high",
+      "name": "💾 청구 저장 (HIGH)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3760, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/claims",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"surgery_code\": \"{{ $json.claim.surgery_code }}\",\n  \"surgery_name\": \"{{ $json.claim.surgery_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"REJECT\",\n  \"ai_confidence_score\": {{ $json.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"{{ $json.fraudDetection.riskLevel }}\",\n  \"total_approved\": 0,\n  \"total_rejected\": {{ $json.claim.total_medical_expense }},\n  \"status\": \"PENDING\"\n}",
+        "options": {}
+      },
+      "id": "save-claim-critical",
+      "name": "💾 청구 저장 (CRITICAL)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3760, 380],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/approvals/start",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"claimId\": {{ $json.data.id }},\n  \"templateCode\": \"AUTO_APPROVE\",\n  \"priority\": \"LOW\"\n}",
+        "options": {}
+      },
+      "id": "start-approval-low",
+      "name": "✅ 자동승인 결재",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4000, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/approvals/start",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"claimId\": {{ $json.data.id }},\n  \"templateCode\": \"TEAM_LEAD_ONLY\",\n  \"priority\": \"NORMAL\"\n}",
+        "options": {}
+      },
+      "id": "start-approval-medium",
+      "name": "👤 팀장 결재 시작",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4000, 60],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/approvals/start",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"claimId\": {{ $json.data.id }},\n  \"templateCode\": \"TEAM_AND_MANAGER\",\n  \"priority\": \"HIGH\"\n}",
+        "options": {}
+      },
+      "id": "start-approval-high",
+      "name": "👥 팀장+부장 결재",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4000, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://insurtech-api:3000/api/fraud/siu-referral/{{ $json.data.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"referralReason\": \"사기 의심 점수 CRITICAL ({{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }}점)\",\n  \"detectedPatterns\": {{ JSON.stringify($('🚨 사기 탐지 분석').item.json.fraudDetection.detectedPatterns) }},\n  \"priority\": \"URGENT\"\n}",
+        "options": {}
+      },
+      "id": "siu-referral",
+      "name": "🚔 SIU 조사 의뢰",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4000, 380],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=✅ *자동 승인 완료*\n\n청구번호: {{ $('💾 청구 저장 (LOW)').item.json.data.claim_number }}\n고객명: {{ $('📊 담보 분석 및 계산').item.json.claim.customer_name }}\n청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}\n승인금액: {{ $('📊 담보 분석 및 계산').item.json.totalApproved.toLocaleString() }}원\nAI 신뢰도: {{ ($('🗳️ 앙상블 투표').item.json.confidenceScore * 100).toFixed(1) }}%\n사기점수: {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }}점 (LOW)",
+        "otherOptions": {}
+      },
+      "id": "slack-approved",
+      "name": "📱 Slack 알림 (승인)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [4240, -100],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-claims",
+        "text": "=⚠️ *팀장 검토 필요*\n\n청구번호: {{ $('💾 청구 저장 (MEDIUM)').item.json.data.claim_number }}\n고객명: {{ $('📊 담보 분석 및 계산').item.json.claim.customer_name }}\n청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}\n청구금액: {{ $('📊 담보 분석 및 계산').item.json.claim.total_medical_expense.toLocaleString() }}원\n예상승인: {{ $('📊 담보 분석 및 계산').item.json.totalApproved.toLocaleString() }}원\nAI 추천: {{ $('🗳️ 앙상블 투표').item.json.finalRecommendation }}\n사기점수: {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }}점 (MEDIUM)\n\n결재 바로가기: http://localhost:3001/approvals",
+        "otherOptions": {}
+      },
+      "id": "slack-review",
+      "name": "📱 Slack 알림 (검토)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [4240, 60],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-fraud-alert",
+        "text": "=🚨 *고위험 청구 감지*\n\n청구번호: {{ $('💾 청구 저장 (HIGH)').item.json.data.claim_number }}\n고객명: {{ $('📊 담보 분석 및 계산').item.json.claim.customer_name }}\n청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}\n청구금액: {{ $('📊 담보 분석 및 계산').item.json.claim.total_medical_expense.toLocaleString() }}원\n\n🔴 사기점수: {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }}점 (HIGH)\n\n탐지된 패턴:\n{{ $('🚨 사기 탐지 분석').item.json.fraudDetection.detectedPatterns.map(p => '• ' + p.name + ': ' + p.description).join('\\n') }}\n\n팀장+부장 결재 필요\n결재 바로가기: http://localhost:3001/approvals",
+        "otherOptions": {}
+      },
+      "id": "slack-high-risk",
+      "name": "📱 Slack 알림 (고위험)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [4240, 220],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#insurance-fraud-alert",
+        "text": "=🚔 *SIU 조사 의뢰*\n\n청구번호: {{ $('💾 청구 저장 (CRITICAL)').item.json.data.claim_number }}\n고객명: {{ $('📊 담보 분석 및 계산').item.json.claim.customer_name }}\n\n🔴🔴 사기점수: {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }}점 (CRITICAL)\n\n탐지된 패턴:\n{{ $('🚨 사기 탐지 분석').item.json.fraudDetection.detectedPatterns.map(p => '• ' + p.name + ' (+' + p.score + '점): ' + p.description).join('\\n') }}\n\n⚠️ 즉시 SIU팀 조사 착수 필요\n\n@here @siu-team",
+        "otherOptions": {}
+      },
+      "id": "slack-siu",
+      "name": "📱 Slack 알림 (SIU)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [4240, 380],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-bot",
+          "name": "Slack Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "claims@insurtech.co.kr",
+        "toEmail": "={{ $('📋 보험증권 조회').item.json.data.customer.email }}",
+        "subject": "=보험금 청구 접수 완료 - {{ $('💾 청구 저장 (LOW)').item.json.data.claim_number }}",
+        "emailType": "html",
+        "html": "=<h2>보험금 청구가 접수되었습니다</h2>\n<p>안녕하세요, {{ $('📊 담보 분석 및 계산').item.json.claim.customer_name }}님</p>\n<p>귀하의 보험금 청구가 정상적으로 접수되어 자동 심사 완료되었습니다.</p>\n<hr>\n<h3>청구 정보</h3>\n<ul>\n<li>청구번호: {{ $('💾 청구 저장 (LOW)').item.json.data.claim_number }}</li>\n<li>청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}</li>\n<li>진단명: {{ $('📊 담보 분석 및 계산').item.json.claim.diagnosis_name }}</li>\n<li>청구금액: {{ $('📊 담보 분석 및 계산').item.json.claim.total_medical_expense.toLocaleString() }}원</li>\n<li><strong>승인금액: {{ $('📊 담보 분석 및 계산').item.json.totalApproved.toLocaleString() }}원</strong></li>\n</ul>\n<p>승인된 금액은 영업일 기준 3일 이내에 등록된 계좌로 입금될 예정입니다.</p>\n<p>감사합니다.</p>",
+        "options": {}
+      },
+      "id": "email-customer-approved",
+      "name": "📧 고객 메일 (승인)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [4480, -100],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-config",
+          "name": "SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "claims@insurtech.co.kr",
+        "toEmail": "={{ $('📋 보험증권 조회').item.json.data.customer.email }}",
+        "subject": "=보험금 청구 접수 완료 - {{ $json.data.claim_number }}",
+        "emailType": "html",
+        "html": "=<h2>보험금 청구가 접수되었습니다</h2>\n<p>안녕하세요, {{ $('📊 담보 분석 및 계산').item.json.claim.customer_name }}님</p>\n<p>귀하의 보험금 청구가 정상적으로 접수되었습니다.</p>\n<p>현재 담당자 검토 중이며, 처리 완료 시 별도 안내드리겠습니다.</p>\n<hr>\n<h3>청구 정보</h3>\n<ul>\n<li>청구번호: {{ $json.data.claim_number }}</li>\n<li>청구유형: {{ $('📊 담보 분석 및 계산').item.json.claim.claim_type }}</li>\n<li>진단명: {{ $('📊 담보 분석 및 계산').item.json.claim.diagnosis_name }}</li>\n<li>청구금액: {{ $('📊 담보 분석 및 계산').item.json.claim.total_medical_expense.toLocaleString() }}원</li>\n</ul>\n<p>처리 기간: 영업일 기준 약 3-5일 소요 예정</p>\n<p>감사합니다.</p>",
+        "options": {}
+      },
+      "id": "email-customer-pending",
+      "name": "📧 고객 메일 (접수)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [4480, 140],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-config",
+          "name": "SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"청구가 성공적으로 접수되어 자동 승인되었습니다.\",\n  \"data\": {\n    \"claimId\": {{ $('💾 청구 저장 (LOW)').item.json.data.id }},\n    \"claimNumber\": \"{{ $('💾 청구 저장 (LOW)').item.json.data.claim_number }}\",\n    \"status\": \"APPROVED\",\n    \"approvedAmount\": {{ $('📊 담보 분석 및 계산').item.json.totalApproved }},\n    \"aiConfidence\": {{ $('🗳️ 앙상블 투표').item.json.confidenceScore }},\n    \"fraudScore\": {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }},\n    \"riskLevel\": \"LOW\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-approved",
+      "name": "📤 응답 (승인)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4720, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"청구가 접수되어 검토 중입니다.\",\n  \"data\": {\n    \"claimId\": {{ $json.data.id }},\n    \"claimNumber\": \"{{ $json.data.claim_number }}\",\n    \"status\": \"PENDING\",\n    \"estimatedAmount\": {{ $('📊 담보 분석 및 계산').item.json.totalApproved }},\n    \"aiConfidence\": {{ $('🗳️ 앙상블 투표').item.json.confidenceScore }},\n    \"fraudScore\": {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }},\n    \"riskLevel\": \"{{ $('🚨 사기 탐지 분석').item.json.fraudDetection.riskLevel }}\",\n    \"nextStep\": \"담당자 검토 후 결과 안내 예정\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-pending",
+      "name": "📤 응답 (검토중)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4720, 140]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"청구가 접수되었으나 추가 조사가 필요합니다.\",\n  \"data\": {\n    \"claimId\": {{ $('💾 청구 저장 (CRITICAL)').item.json.data.id }},\n    \"claimNumber\": \"{{ $('💾 청구 저장 (CRITICAL)').item.json.data.claim_number }}\",\n    \"status\": \"UNDER_INVESTIGATION\",\n    \"fraudScore\": {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }},\n    \"riskLevel\": \"CRITICAL\",\n    \"nextStep\": \"조사팀에서 연락 예정\"\n  }\n}",
+        "options": {}
+      },
+      "id": "response-investigation",
+      "name": "📤 응답 (조사중)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4720, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"입력 데이터 검증 실패\",\n  \"errors\": {{ JSON.stringify($json.errors) }}\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-validation-error",
+      "name": "❌ 응답 (검증실패)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"보험증권을 찾을 수 없습니다.\",\n  \"error\": \"POLICY_NOT_FOUND\"\n}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "response-policy-error",
+      "name": "❌ 응답 (증권없음)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"보험 정책 검증 실패\",\n  \"issues\": {{ JSON.stringify($json.issues) }}\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-policy-invalid",
+      "name": "❌ 응답 (정책오류)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://insurtech-api:3000/api/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"entityType\": \"CLAIM\",\n  \"entityId\": {{ $json.data?.id || 0 }},\n  \"action\": \"CREATE\",\n  \"userId\": 1,\n  \"details\": {\n    \"source\": \"n8n-workflow\",\n    \"workflowName\": \"보험금 청구 자동심사\",\n    \"aiModels\": [\"GPT-4o\", \"Claude\", \"Gemini\"],\n    \"fraudScore\": {{ $('🚨 사기 탐지 분석').item.json.fraudDetection.totalScore }},\n    \"riskLevel\": \"{{ $('🚨 사기 탐지 분석').item.json.fraudDetection.riskLevel }}\",\n    \"aiRecommendation\": \"{{ $('🗳️ 앙상블 투표').item.json.finalRecommendation }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "📝 감사 로그 저장",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4480, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jwt-token",
+          "name": "JWT Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "📥 청구 접수 Webhook": {
+      "main": [
+        [
+          {
+            "node": "✅ 입력 데이터 검증",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 입력 데이터 검증": {
+      "main": [
+        [
+          {
+            "node": "🔀 유효성 체크",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 유효성 체크": {
+      "main": [
+        [
+          {
+            "node": "🔐 시스템 로그인",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 응답 (검증실패)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔐 시스템 로그인": {
+      "main": [
+        [
+          {
+            "node": "📋 보험증권 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 보험증권 조회": {
+      "main": [
+        [
+          {
+            "node": "🔀 증권 존재 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 증권 존재 확인": {
+      "main": [
+        [
+          {
+            "node": "🔍 정책 유효성 분석",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 응답 (증권없음)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 정책 유효성 분석": {
+      "main": [
+        [
+          {
+            "node": "🔀 정책 유효?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 정책 유효?": {
+      "main": [
+        [
+          {
+            "node": "💰 담보 목록 조회",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📖 약관 조회",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 응답 (정책오류)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💰 담보 목록 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 정책 데이터 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 약관 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 정책 데이터 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔗 정책 데이터 병합": {
+      "main": [
+        [
+          {
+            "node": "📊 담보 분석 및 계산",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 담보 분석 및 계산": {
+      "main": [
+        [
+          {
+            "node": "⚡ AI 병렬 처리 시작",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ AI 병렬 처리 시작": {
+      "main": [
+        [
+          {
+            "node": "🤖 GPT-4o 심사",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🤖 Claude 심사",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🤖 Gemini 심사",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 GPT-4o 심사": {
+      "main": [
+        [
+          {
+            "node": "🔗 AI 결과 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Claude 심사": {
+      "main": [
+        [
+          {
+            "node": "🔗 AI 결과 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🤖 Gemini 심사": {
+      "main": [
+        [
+          {
+            "node": "🔗 AI 결과 병합",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "🔗 AI 결과 병합": {
+      "main": [
+        [
+          {
+            "node": "🗳️ 앙상블 투표",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗳️ 앙상블 투표": {
+      "main": [
+        [
+          {
+            "node": "🚨 사기 탐지 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚨 사기 탐지 분석": {
+      "main": [
+        [
+          {
+            "node": "🔀 위험도별 분기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 위험도별 분기": {
+      "main": [
+        [
+          {
+            "node": "💾 청구 저장 (LOW)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 청구 저장 (MEDIUM)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 청구 저장 (HIGH)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 청구 저장 (CRITICAL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 청구 저장 (LOW)": {
+      "main": [
+        [
+          {
+            "node": "✅ 자동승인 결재",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 청구 저장 (MEDIUM)": {
+      "main": [
+        [
+          {
+            "node": "👤 팀장 결재 시작",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 청구 저장 (HIGH)": {
+      "main": [
+        [
+          {
+            "node": "👥 팀장+부장 결재",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 청구 저장 (CRITICAL)": {
+      "main": [
+        [
+          {
+            "node": "🚔 SIU 조사 의뢰",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 자동승인 결재": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack 알림 (승인)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👤 팀장 결재 시작": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack 알림 (검토)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📧 고객 메일 (접수)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👥 팀장+부장 결재": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack 알림 (고위험)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📧 고객 메일 (접수)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그 저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚔 SIU 조사 의뢰": {
+      "main": [
+        [
+          {
+            "node": "📱 Slack 알림 (SIU)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📝 감사 로그 저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack 알림 (승인)": {
+      "main": [
+        [
+          {
+            "node": "📧 고객 메일 (승인)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📧 고객 메일 (승인)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (승인)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack 알림 (검토)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (검토중)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack 알림 (고위험)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (검토중)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📱 Slack 알림 (SIU)": {
+      "main": [
+        [
+          {
+            "node": "📤 응답 (조사중)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "instanceId": "insurtech-n8n"
+  },
+  "tags": [
+    {
+      "name": "보험",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "청구심사",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "AI",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

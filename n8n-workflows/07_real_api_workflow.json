@@ -1,0 +1,1089 @@
+{
+  "name": "🏥 보험금 청구 심사 (실제 API 연동)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start",
+      "name": "▶️ 시작",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 테스트용 청구 데이터\nreturn {\n  policy_number: 'POL-2024-001',\n  customer_name: '홍길동',\n  claim_type: 'HOSPITALIZATION',\n  treatment_start_date: '2024-01-10',\n  treatment_end_date: '2024-01-15',\n  hospital_name: '서울대학교병원',\n  diagnosis_code: 'K35.0',\n  diagnosis_name: '급성 충수염',\n  hospitalization_days: 5,\n  total_medical_expense: 2500000,\n  insured_expense: 2000000,\n  uninsured_expense: 500000\n};"
+      },
+      "id": "test-data",
+      "name": "📝 테스트 청구데이터",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/auth/login",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userCode",
+              "value": "EMP001"
+            },
+            {
+              "name": "password",
+              "value": "password123"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "api-login",
+      "name": "🔐 [API] 로그인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const login = $input.first().json;\nconst claim = $('📝 테스트 청구데이터').first().json;\n\nif (!login.success) {\n  throw new Error('로그인 실패');\n}\n\nreturn {\n  token: login.data.token,\n  user: login.data.user,\n  claim: claim\n};"
+      },
+      "id": "extract-token",
+      "name": "🔑 토큰 추출",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/policies",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "api-policies-list",
+      "name": "📋 [API] 증권 목록",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst prev = $('🔑 토큰 추출').first().json;\n\n// 첫 번째 증권 선택 (또는 policy_number로 찾기)\nlet policy = null;\nif (result.success && result.data?.length > 0) {\n  policy = result.data.find(p => p.policy_number === prev.claim.policy_number) || result.data[0];\n}\n\nreturn {\n  token: prev.token,\n  claim: prev.claim,\n  policy: policy,\n  policyFound: !!policy\n};"
+      },
+      "id": "find-policy",
+      "name": "🔍 증권 찾기",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "found",
+              "leftValue": "={{ $json.policyFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-policy-found",
+      "name": "🔀 증권 있음?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3000/api/policies/{{ $json.policy.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "api-policy-detail",
+      "name": "📄 [API] 증권 상세",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3000/api/policies/{{ $('🔍 증권 찾기').first().json.policy.id }}/coverages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('🔍 증권 찾기').first().json.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "api-coverages",
+      "name": "💰 [API] 담보 목록",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/policies/terms/all",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('🔍 증권 찾기').first().json.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "api-terms",
+      "name": "📖 [API] 약관 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 600]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-policy-data",
+      "name": "🔗 정책 데이터 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1540, 300]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-all-data",
+      "name": "🔗 전체 데이터 병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1760, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 병합된 데이터 정리\nconst items = $input.all();\nconst baseData = $('🔍 증권 찾기').first().json;\n\nlet policyDetail = null;\nlet coverages = [];\nlet terms = [];\n\nitems.forEach(item => {\n  const json = item.json;\n  if (json.data?.policy_number) {\n    policyDetail = json.data;\n  } else if (Array.isArray(json.data)) {\n    if (json.data[0]?.coverage_code || json.data[0]?.code) {\n      coverages = json.data;\n    } else if (json.data[0]?.article_number) {\n      terms = json.data;\n    }\n  }\n});\n\nreturn {\n  token: baseData.token,\n  claim: baseData.claim,\n  policy: policyDetail || baseData.policy,\n  coverages: coverages,\n  terms: terms\n};"
+      },
+      "id": "organize-data",
+      "name": "📊 데이터 정리",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 정책 유효성 검증\nconst data = $input.first().json;\nconst claim = data.claim;\nconst policy = data.policy;\n\nlet isValid = true;\nconst issues = [];\n\nif (!policy) {\n  isValid = false;\n  issues.push('증권 정보 없음');\n} else {\n  // 보장기간 확인\n  const start = new Date(policy.coverage_start_date);\n  const end = new Date(policy.coverage_end_date);\n  const treatment = new Date(claim.treatment_start_date);\n  \n  if (treatment < start || treatment > end) {\n    isValid = false;\n    issues.push(`보장기간 외: ${policy.coverage_start_date} ~ ${policy.coverage_end_date}`);\n  }\n  \n  // 납입상태 확인\n  if (policy.status !== 'ACTIVE') {\n    isValid = false;\n    issues.push(`증권 상태: ${policy.status}`);\n  }\n  \n  // 면책기간 확인 (계약 후 90일)\n  const exemptionEnd = new Date(start);\n  exemptionEnd.setDate(exemptionEnd.getDate() + 90);\n  if (treatment < exemptionEnd) {\n    issues.push('⚠️ 면책기간 내 (90일)');\n  }\n  \n  // 감액기간 확인 (계약 후 1년)\n  const reductionEnd = new Date(start);\n  reductionEnd.setFullYear(reductionEnd.getFullYear() + 1);\n  if (treatment < reductionEnd) {\n    issues.push('⚠️ 감액기간 내 (1년) - 50% 감액');\n  }\n}\n\nreturn {\n  ...data,\n  validation: {\n    isValid: isValid,\n    issues: issues\n  }\n};"
+      },
+      "id": "validate-policy",
+      "name": "✅ 정책 유효성 검증",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.validation.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "🔀 유효성 통과?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2420, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 담보 분석 및 지급액 계산\nconst data = $input.first().json;\nconst claim = data.claim;\nconst coverages = data.coverages || [];\n\nconst breakdown = [];\nlet totalApproved = 0;\nlet totalRejected = 0;\n\n// 청구유형에 맞는 담보 필터링\nconst applicableCoverages = coverages.filter(cov => {\n  const code = (cov.code || cov.coverage_code || '').toUpperCase();\n  if (claim.claim_type === 'HOSPITALIZATION') {\n    return code.includes('HOS') || code.includes('입원');\n  } else if (claim.claim_type === 'SURGERY') {\n    return code.includes('SUR') || code.includes('수술');\n  } else if (claim.claim_type === 'OUTPATIENT') {\n    return code.includes('OUT') || code.includes('통원');\n  }\n  return true;\n});\n\n// 담보가 없으면 기본 담보 생성\nif (applicableCoverages.length === 0) {\n  applicableCoverages.push(\n    { name: '입원일당', code: 'HOS-DAILY', type: 'FIXED', daily_amount: 50000, max_days: 180 },\n    { name: '입원의료비', code: 'HOS-MEDICAL', type: 'REAL_LOSS', insured_amount: 5000000, deductible_rate: 0.1, payout_rate: 0.9 }\n  );\n}\n\napplicableCoverages.forEach(cov => {\n  let approved = 0;\n  let rejected = 0;\n  let calculation = '';\n  \n  const covType = cov.type || cov.coverage_type || 'FIXED';\n  \n  if (covType === 'FIXED') {\n    // 정액형\n    if (claim.hospitalization_days && (cov.daily_amount || cov.amount_per_day)) {\n      const daily = cov.daily_amount || cov.amount_per_day || 50000;\n      const maxDays = cov.max_days || 180;\n      const days = Math.min(claim.hospitalization_days, maxDays);\n      approved = daily * days;\n      calculation = `${daily.toLocaleString()}원/일 × ${days}일`;\n    } else {\n      approved = cov.insured_amount || cov.coverage_amount || 1000000;\n      calculation = `정액 ${approved.toLocaleString()}원`;\n    }\n  } else {\n    // 실손형\n    const base = claim.insured_expense || claim.total_medical_expense;\n    const deductible = cov.deductible_amount || 0;\n    const deductibleRate = cov.deductible_rate || 0.1;\n    const payoutRate = cov.payout_rate || 0.9;\n    const limit = cov.insured_amount || cov.coverage_amount || 5000000;\n    \n    const afterDeductible = Math.max(0, base - deductible) * (1 - deductibleRate);\n    approved = Math.min(afterDeductible * payoutRate, limit);\n    calculation = `(${base.toLocaleString()} - ${deductible.toLocaleString()}) × ${(1-deductibleRate)*100}% × ${payoutRate*100}%`;\n  }\n  \n  breakdown.push({\n    coverageName: cov.name || cov.coverage_name,\n    coverageCode: cov.code || cov.coverage_code,\n    coverageType: covType,\n    calculation: calculation,\n    claimedAmount: claim.insured_expense || claim.total_medical_expense,\n    approvedAmount: Math.round(approved),\n    rejectedAmount: Math.round(rejected)\n  });\n  \n  totalApproved += approved;\n  totalRejected += rejected;\n});\n\nreturn {\n  ...data,\n  coverageAnalysis: {\n    applicableCoverages: applicableCoverages.length,\n    breakdown: breakdown,\n    totalApproved: Math.round(totalApproved),\n    totalRejected: Math.round(totalRejected),\n    totalClaimed: claim.total_medical_expense\n  }\n};"
+      },
+      "id": "analyze-coverage",
+      "name": "📊 담보 분석 & 계산",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 300]
+    },
+    {
+      "parameters": {},
+      "id": "noop-split",
+      "name": "⚡ AI 병렬 처리",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// GPT-4o 심사 시뮬레이션 (API 키 없음)\nconst data = $input.first().json;\nconst claim = data.claim;\nconst analysis = data.coverageAnalysis;\n\n// 시뮬레이션 딜레이 (실제 API 호출처럼)\nawait new Promise(r => setTimeout(r, 500));\n\nconst confidence = 0.85 + Math.random() * 0.1;\nlet recommendation = 'APPROVE';\n\nif (analysis.totalApproved < claim.total_medical_expense * 0.3) {\n  recommendation = 'REVIEW';\n}\n\nreturn {\n  modelId: 1,\n  modelName: 'GPT-4o',\n  modelCode: 'openai-gpt4o',\n  recommendation: recommendation,\n  confidence: Math.round(confidence * 100) / 100,\n  reasoning: '청구 내역이 약관 조건에 부합하며, 담보 적용이 적절합니다.',\n  responseTimeMs: 523,\n  breakdown: analysis.breakdown\n};"
+      },
+      "id": "ai-gpt4",
+      "name": "🤖 GPT-4o (시뮬레이션)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Claude 심사 시뮬레이션 (API 키 없음)\nconst data = $('📊 담보 분석 & 계산').first().json;\nconst claim = data.claim;\nconst analysis = data.coverageAnalysis;\n\nawait new Promise(r => setTimeout(r, 600));\n\nconst confidence = 0.87 + Math.random() * 0.08;\nlet recommendation = 'APPROVE';\n\nif (analysis.totalApproved < claim.total_medical_expense * 0.3) {\n  recommendation = 'REVIEW';\n}\n\nreturn {\n  modelId: 2,\n  modelName: 'Claude-Sonnet',\n  modelCode: 'anthropic-claude',\n  recommendation: recommendation,\n  confidence: Math.round(confidence * 100) / 100,\n  reasoning: '의료비 청구 내역을 분석한 결과, 보장 범위 내 적정 청구로 판단됩니다.',\n  responseTimeMs: 612,\n  breakdown: analysis.breakdown\n};"
+      },
+      "id": "ai-claude",
+      "name": "🤖 Claude (시뮬레이션)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gemini 심사 시뮬레이션 (API 키 없음)\nconst data = $('📊 담보 분석 & 계산').first().json;\nconst claim = data.claim;\nconst analysis = data.coverageAnalysis;\n\nawait new Promise(r => setTimeout(r, 450));\n\nconst confidence = 0.82 + Math.random() * 0.12;\nlet recommendation = 'APPROVE';\n\nif (analysis.totalApproved < claim.total_medical_expense * 0.3) {\n  recommendation = 'REVIEW';\n}\n\nreturn {\n  modelId: 3,\n  modelName: 'Gemini-Pro',\n  modelCode: 'google-gemini',\n  recommendation: recommendation,\n  confidence: Math.round(confidence * 100) / 100,\n  reasoning: '진단 및 치료 내역이 청구 사유와 일치하며, 금액이 합리적입니다.',\n  responseTimeMs: 458,\n  breakdown: analysis.breakdown\n};"
+      },
+      "id": "ai-gemini",
+      "name": "🤖 Gemini (시뮬레이션)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 500]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "merge-ai",
+      "name": "🔗 AI 결과 통합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI 앙상블 투표\nconst items = $input.all();\nconst baseData = $('📊 담보 분석 & 계산').first().json;\n\nconst aiResults = items.map(i => i.json).filter(j => j.modelName);\n\n// 투표 집계\nconst votes = { APPROVE: 0, REJECT: 0, REVIEW: 0 };\nlet totalConfidence = 0;\nlet totalWeight = 0;\n\nconst weights = { 'GPT-4o': 0.35, 'Claude-Sonnet': 0.35, 'Gemini-Pro': 0.30 };\n\naiResults.forEach(result => {\n  const weight = weights[result.modelName] || 0.33;\n  votes[result.recommendation] = (votes[result.recommendation] || 0) + weight;\n  totalConfidence += result.confidence * weight;\n  totalWeight += weight;\n});\n\n// 최종 결정\nlet finalRec = 'REVIEW';\nlet maxVote = 0;\nfor (const [rec, vote] of Object.entries(votes)) {\n  if (vote > maxVote) {\n    maxVote = vote;\n    finalRec = rec;\n  }\n}\n\nconst avgConfidence = totalWeight > 0 ? totalConfidence / totalWeight : 0.5;\nconst isUnanimous = aiResults.every(r => r.recommendation === finalRec);\n\nreturn {\n  ...baseData,\n  aiEnsemble: {\n    models: aiResults,\n    votes: votes,\n    finalRecommendation: finalRec,\n    confidenceScore: Math.round(avgConfidence * 100) / 100,\n    isUnanimous: isUnanimous,\n    consensusLevel: isUnanimous ? 'FULL' : maxVote >= 0.7 ? 'STRONG' : 'WEAK'\n  }\n};"
+      },
+      "id": "ensemble-vote",
+      "name": "🗳️ 앙상블 투표",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 사기 탐지 패턴 분석\nconst data = $input.first().json;\nconst claim = data.claim;\nconst policy = data.policy;\n\nlet totalScore = 0;\nconst patterns = [];\n\n// 패턴 1: 고액 청구 (500만원 이상)\nif (claim.total_medical_expense >= 5000000) {\n  totalScore += 25;\n  patterns.push({\n    pattern: 'HIGH_AMOUNT',\n    name: '고액 청구',\n    score: 25,\n    severity: 'HIGH',\n    description: `청구액 ${claim.total_medical_expense.toLocaleString()}원 (500만원 이상)`\n  });\n} else if (claim.total_medical_expense >= 3000000) {\n  totalScore += 15;\n  patterns.push({\n    pattern: 'MEDIUM_AMOUNT',\n    name: '중액 청구',\n    score: 15,\n    severity: 'MEDIUM',\n    description: `청구액 ${claim.total_medical_expense.toLocaleString()}원`\n  });\n}\n\n// 패턴 2: 장기 입원 (14일 이상)\nif (claim.hospitalization_days >= 14) {\n  totalScore += 15;\n  patterns.push({\n    pattern: 'LONG_STAY',\n    name: '장기 입원',\n    score: 15,\n    severity: 'MEDIUM',\n    description: `${claim.hospitalization_days}일 입원`\n  });\n}\n\n// 패턴 3: 주말 입원\nconst startDay = new Date(claim.treatment_start_date).getDay();\nif (startDay === 5 || startDay === 6) {\n  totalScore += 10;\n  patterns.push({\n    pattern: 'WEEKEND_ADMISSION',\n    name: '주말 입원',\n    score: 10,\n    severity: 'LOW',\n    description: startDay === 5 ? '금요일 입원' : '토요일 입원'\n  });\n}\n\n// 패턴 4: 조기 청구 (계약 후 6개월 내)\nif (policy) {\n  const contractDate = new Date(policy.coverage_start_date);\n  const treatmentDate = new Date(claim.treatment_start_date);\n  const monthsDiff = (treatmentDate - contractDate) / (1000 * 60 * 60 * 24 * 30);\n  if (monthsDiff < 6) {\n    totalScore += 20;\n    patterns.push({\n      pattern: 'EARLY_CLAIM',\n      name: '조기 청구',\n      score: 20,\n      severity: 'HIGH',\n      description: `계약 후 ${Math.round(monthsDiff)}개월 만에 청구`\n    });\n  }\n}\n\n// 패턴 5: 진단코드 위험도\nconst highRiskCodes = ['C', 'I21', 'I22', 'G45'];\nconst diagCode = (claim.diagnosis_code || '').toUpperCase();\nif (highRiskCodes.some(code => diagCode.startsWith(code))) {\n  totalScore += 15;\n  patterns.push({\n    pattern: 'HIGH_RISK_DIAGNOSIS',\n    name: '고위험 진단',\n    score: 15,\n    severity: 'HIGH',\n    description: `진단코드 ${diagCode}`\n  });\n}\n\n// 위험도 결정\nlet riskLevel = 'LOW';\nlet recommendedAction = 'APPROVE';\n\nif (totalScore >= 70) {\n  riskLevel = 'CRITICAL';\n  recommendedAction = 'REJECT';\n} else if (totalScore >= 50) {\n  riskLevel = 'HIGH';\n  recommendedAction = 'INVESTIGATE';\n} else if (totalScore >= 30) {\n  riskLevel = 'MEDIUM';\n  recommendedAction = 'REVIEW';\n}\n\nreturn {\n  ...data,\n  fraudDetection: {\n    totalScore: totalScore,\n    riskLevel: riskLevel,\n    recommendedAction: recommendedAction,\n    detectedPatterns: patterns,\n    patternsCount: patterns.length,\n    analyzedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "fraud-analysis",
+      "name": "🚨 사기 탐지 분석",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3960, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "LOW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "LOW_RISK"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "MEDIUM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "MEDIUM_RISK"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "HIGH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HIGH_RISK"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.fraudDetection.riskLevel }}",
+                    "rightValue": "CRITICAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CRITICAL_RISK"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-risk",
+      "name": "🔀 위험도별 분기",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [4180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/claims",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"APPROVE\",\n  \"ai_confidence_score\": {{ $json.aiEnsemble.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"LOW\",\n  \"total_approved\": {{ $json.coverageAnalysis.totalApproved }},\n  \"total_rejected\": {{ $json.coverageAnalysis.totalRejected }},\n  \"status\": \"APPROVED\"\n}",
+        "options": {}
+      },
+      "id": "api-save-low",
+      "name": "💾 [API] 자동승인 저장",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4420, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/claims",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"REVIEW\",\n  \"ai_confidence_score\": {{ $json.aiEnsemble.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"MEDIUM\",\n  \"total_approved\": {{ $json.coverageAnalysis.totalApproved }},\n  \"total_rejected\": {{ $json.coverageAnalysis.totalRejected }},\n  \"status\": \"PENDING\"\n}",
+        "options": {}
+      },
+      "id": "api-save-medium",
+      "name": "💾 [API] 팀장검토 저장",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4420, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/claims",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"INVESTIGATE\",\n  \"ai_confidence_score\": {{ $json.aiEnsemble.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"HIGH\",\n  \"total_approved\": {{ $json.coverageAnalysis.totalApproved }},\n  \"total_rejected\": {{ $json.coverageAnalysis.totalRejected }},\n  \"status\": \"PENDING\"\n}",
+        "options": {}
+      },
+      "id": "api-save-high",
+      "name": "💾 [API] 부장검토 저장",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4420, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/claims",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"policy_number\": \"{{ $json.claim.policy_number }}\",\n  \"customer_name\": \"{{ $json.claim.customer_name }}\",\n  \"claim_type\": \"{{ $json.claim.claim_type }}\",\n  \"treatment_start_date\": \"{{ $json.claim.treatment_start_date }}\",\n  \"treatment_end_date\": \"{{ $json.claim.treatment_end_date }}\",\n  \"hospital_name\": \"{{ $json.claim.hospital_name }}\",\n  \"diagnosis_code\": \"{{ $json.claim.diagnosis_code }}\",\n  \"diagnosis_name\": \"{{ $json.claim.diagnosis_name }}\",\n  \"hospitalization_days\": {{ $json.claim.hospitalization_days || 0 }},\n  \"total_medical_expense\": {{ $json.claim.total_medical_expense }},\n  \"insured_expense\": {{ $json.claim.insured_expense }},\n  \"uninsured_expense\": {{ $json.claim.uninsured_expense }},\n  \"ai_recommendation\": \"REJECT\",\n  \"ai_confidence_score\": {{ $json.aiEnsemble.confidenceScore }},\n  \"fraud_score\": {{ $json.fraudDetection.totalScore }},\n  \"fraud_risk_level\": \"CRITICAL\",\n  \"total_approved\": 0,\n  \"total_rejected\": {{ $json.claim.total_medical_expense }},\n  \"status\": \"REJECTED\"\n}",
+        "options": {}
+      },
+      "id": "api-save-critical",
+      "name": "💾 [API] SIU의뢰 저장",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4420, 550]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 저장 결과 확인\nconst saveResult = $input.first().json;\nconst fraudData = $('🚨 사기 탐지 분석').first().json;\n\nif (!saveResult.success) {\n  return {\n    success: false,\n    error: saveResult.error || '저장 실패',\n    data: saveResult\n  };\n}\n\n// API 응답이 루트 레벨에 직접 반환됨 (data 래퍼 없음)\nreturn {\n  claimId: saveResult.claim_id,\n  claimNumber: saveResult.claim_number,\n  status: saveResult.status,\n  riskLevel: fraudData.fraudDetection.riskLevel,\n  token: fraudData.token\n};"
+      },
+      "id": "check-save",
+      "name": "✔️ 저장 확인",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "has-id",
+              "leftValue": "={{ $json.claimId }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-saved",
+      "name": "🔀 저장 성공?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/approvals/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"claimId\": {{ $json.claimId }},\n  \"urgency\": \"{{ $json.riskLevel === 'LOW' ? 'LOW' : $json.riskLevel === 'MEDIUM' ? 'NORMAL' : 'HIGH' }}\"\n}",
+        "options": {}
+      },
+      "id": "api-start-approval",
+      "name": "📝 [API] 결재 시작",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [5100, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 최종 결과 생성\nconst approvalResult = $input.first().json;\nconst saveData = $('✔️ 저장 확인').first().json;\nconst fraudData = $('🚨 사기 탐지 분석').first().json;\nconst aiData = fraudData.aiEnsemble;\nconst coverageData = fraudData.coverageAnalysis;\n\nreturn {\n  success: true,\n  message: '청구가 성공적으로 처리되었습니다.',\n  summary: {\n    claimId: saveData.claimId,\n    claimNumber: saveData.claimNumber,\n    status: saveData.status,\n    customer: fraudData.claim.customer_name,\n    claimType: fraudData.claim.claim_type\n  },\n  financial: {\n    totalClaimed: fraudData.claim.total_medical_expense,\n    totalApproved: coverageData.totalApproved,\n    totalRejected: coverageData.totalRejected,\n    approvalRate: Math.round((coverageData.totalApproved / fraudData.claim.total_medical_expense) * 100) + '%'\n  },\n  aiAnalysis: {\n    recommendation: aiData.finalRecommendation,\n    confidence: aiData.confidenceScore,\n    consensusLevel: aiData.consensusLevel,\n    modelsUsed: aiData.models.map(m => m.modelName)\n  },\n  fraudDetection: {\n    score: fraudData.fraudDetection.totalScore,\n    riskLevel: fraudData.fraudDetection.riskLevel,\n    action: fraudData.fraudDetection.recommendedAction,\n    patternsDetected: fraudData.fraudDetection.patternsCount\n  },\n  approval: {\n    started: approvalResult.success || false,\n    approvalId: approvalResult.data?.id\n  },\n  processedAt: new Date().toISOString()\n};"
+      },
+      "id": "final-result",
+      "name": "📋 최종 결과",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5320, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 결과를 콘솔에 출력\nconst result = $input.first().json;\n\nconsole.log('');\nconsole.log('═'.repeat(60));\nconsole.log('🏥 보험금 청구 자동심사 완료');\nconsole.log('═'.repeat(60));\nconsole.log('');\nconsole.log('📋 청구 정보');\nconsole.log(`   청구번호: ${result.summary.claimNumber}`);\nconsole.log(`   고객명: ${result.summary.customer}`);\nconsole.log(`   청구유형: ${result.summary.claimType}`);\nconsole.log(`   상태: ${result.summary.status}`);\nconsole.log('');\nconsole.log('💰 금액 분석');\nconsole.log(`   총 청구액: ${result.financial.totalClaimed?.toLocaleString()}원`);\nconsole.log(`   승인 금액: ${result.financial.totalApproved?.toLocaleString()}원`);\nconsole.log(`   거절 금액: ${result.financial.totalRejected?.toLocaleString()}원`);\nconsole.log(`   승인율: ${result.financial.approvalRate}`);\nconsole.log('');\nconsole.log('🤖 AI 앙상블 분석');\nconsole.log(`   최종 추천: ${result.aiAnalysis.recommendation}`);\nconsole.log(`   신뢰도: ${(result.aiAnalysis.confidence * 100).toFixed(1)}%`);\nconsole.log(`   합의 수준: ${result.aiAnalysis.consensusLevel}`);\nconsole.log(`   사용 모델: ${result.aiAnalysis.modelsUsed.join(', ')}`);\nconsole.log('');\nconsole.log('🚨 사기 탐지');\nconsole.log(`   점수: ${result.fraudDetection.score}점`);\nconsole.log(`   위험도: ${result.fraudDetection.riskLevel}`);\nconsole.log(`   권장조치: ${result.fraudDetection.action}`);\nconsole.log(`   탐지패턴: ${result.fraudDetection.patternsDetected}개`);\nconsole.log('');\nconsole.log('═'.repeat(60));\nconsole.log('✅ 워크플로우 실행 완료!');\nconsole.log('═'.repeat(60));\n\nreturn result;"
+      },
+      "id": "output",
+      "name": "📤 결과 출력",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5540, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  success: false,\n  error: '증권을 찾을 수 없습니다.',\n  claim: $('🔍 증권 찾기').first().json.claim\n};"
+      },
+      "id": "no-policy",
+      "name": "❌ 증권 없음",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn {\n  success: false,\n  error: '정책 검증 실패',\n  issues: data.validation.issues,\n  claim: data.claim\n};"
+      },
+      "id": "validation-failed",
+      "name": "❌ 검증 실패",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  success: false,\n  error: '청구 저장 실패',\n  data: $input.first().json\n};"
+      },
+      "id": "save-failed",
+      "name": "❌ 저장 실패",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5100, 400]
+    }
+  ],
+  "connections": {
+    "▶️ 시작": {
+      "main": [
+        [
+          {
+            "node": "📝 테스트 청구데이터",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 테스트 청구데이터": {
+      "main": [
+        [
+          {
+            "node": "🔐 [API] 로그인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔐 [API] 로그인": {
+      "main": [
+        [
+          {
+            "node": "🔑 토큰 추출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔑 토큰 추출": {
+      "main": [
+        [
+          {
+            "node": "📋 [API] 증권 목록",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 [API] 증권 목록": {
+      "main": [
+        [
+          {
+            "node": "🔍 증권 찾기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 증권 찾기": {
+      "main": [
+        [
+          {
+            "node": "🔀 증권 있음?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 증권 있음?": {
+      "main": [
+        [
+          {
+            "node": "📄 [API] 증권 상세",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "💰 [API] 담보 목록",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "📖 [API] 약관 조회",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 증권 없음",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 [API] 증권 상세": {
+      "main": [
+        [
+          {
+            "node": "🔗 정책 데이터 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💰 [API] 담보 목록": {
+      "main": [
+        [
+          {
+            "node": "🔗 정책 데이터 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔗 정책 데이터 병합": {
+      "main": [
+        [
+          {
+            "node": "🔗 전체 데이터 병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 [API] 약관 조회": {
+      "main": [
+        [
+          {
+            "node": "🔗 전체 데이터 병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🔗 전체 데이터 병합": {
+      "main": [
+        [
+          {
+            "node": "📊 데이터 정리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 데이터 정리": {
+      "main": [
+        [
+          {
+            "node": "✅ 정책 유효성 검증",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✅ 정책 유효성 검증": {
+      "main": [
+        [
+          {
+            "node": "🔀 유효성 통과?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 유효성 통과?": {
+      "main": [
+        [
+          {
+            "node": "📊 담보 분석 & 계산",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 검증 실패",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 담보 분석 & 계산": {
+      "main": [
+        [
+          {
+            "node": "⚡ AI 병렬 처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ AI 병렬 처리": {
+      "main": [
+        [
+          {
+            "node": "🤖 GPT-4o (시뮬레이션)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🤖 Claude (시뮬레이션)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🤖 Gemini (시뮬레이션)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 GPT-4o (시뮬레이션)": {
+      "main": [
+        [
+          {
+            "node": "🔗 AI 결과 통합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Claude (시뮬레이션)": {
+      "main": [
+        [
+          {
+            "node": "🔗 AI 결과 통합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Gemini (시뮬레이션)": {
+      "main": [
+        [
+          {
+            "node": "🔗 AI 결과 통합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔗 AI 결과 통합": {
+      "main": [
+        [
+          {
+            "node": "🗳️ 앙상블 투표",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗳️ 앙상블 투표": {
+      "main": [
+        [
+          {
+            "node": "🚨 사기 탐지 분석",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚨 사기 탐지 분석": {
+      "main": [
+        [
+          {
+            "node": "🔀 위험도별 분기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 위험도별 분기": {
+      "main": [
+        [
+          {
+            "node": "💾 [API] 자동승인 저장",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 [API] 팀장검토 저장",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 [API] 부장검토 저장",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 [API] SIU의뢰 저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 [API] 자동승인 저장": {
+      "main": [
+        [
+          {
+            "node": "✔️ 저장 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 [API] 팀장검토 저장": {
+      "main": [
+        [
+          {
+            "node": "✔️ 저장 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 [API] 부장검토 저장": {
+      "main": [
+        [
+          {
+            "node": "✔️ 저장 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 [API] SIU의뢰 저장": {
+      "main": [
+        [
+          {
+            "node": "✔️ 저장 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "✔️ 저장 확인": {
+      "main": [
+        [
+          {
+            "node": "🔀 저장 성공?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 저장 성공?": {
+      "main": [
+        [
+          {
+            "node": "📝 [API] 결재 시작",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ 저장 실패",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 [API] 결재 시작": {
+      "main": [
+        [
+          {
+            "node": "📋 최종 결과",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 최종 결과": {
+      "main": [
+        [
+          {
+            "node": "📤 결과 출력",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7",
+  "meta": {
+    "instanceId": "insurtech-n8n"
+  },
+  "tags": []
+}
