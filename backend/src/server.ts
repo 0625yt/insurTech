@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import path from 'path';
 import { logger } from './utils/logger';
 import { db } from './database/connection';
 import { redis } from './database/redis';
@@ -21,8 +22,20 @@ const PORT = process.env.PORT || 3000;
 // 미들웨어 설정
 // ═══════════════════════════════════════════════════════════════
 
-// 보안 헤더
-app.use(helmet());
+// 보안 헤더 (정적 파일 서빙을 위해 CSP 완화)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrcAttr: ["'unsafe-inline'"],  // onclick 등 인라인 이벤트 핸들러 허용
+      styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "http://localhost:3000", "http://127.0.0.1:3000"],
+    },
+  },
+}));
 
 // CORS 설정
 app.use(cors({
@@ -76,6 +89,27 @@ app.get('/health', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 app.use('/api', routes);
+
+// ═══════════════════════════════════════════════════════════════
+// 정적 파일 서빙 (Frontend & Demo)
+// ═══════════════════════════════════════════════════════════════
+
+// Frontend 폴더 정적 파일 서빙
+const frontendPath = path.join(__dirname, '../../frontend');
+const demoPath = path.join(__dirname, '../../demo');
+
+app.use('/frontend', express.static(frontendPath));
+app.use('/demo', express.static(demoPath));
+
+// 루트 경로 -> 로그인 페이지로 리다이렉트
+app.get('/', (req, res) => {
+  res.redirect('/frontend/login.html');
+});
+
+// 대시보드 경로 추가
+app.get('/dashboard', (req, res) => {
+  res.redirect('/frontend/dashboard-enterprise.html');
+});
 
 // ═══════════════════════════════════════════════════════════════
 // 에러 핸들링

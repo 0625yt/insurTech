@@ -466,8 +466,8 @@ export const getPolicy = async (req: Request, res: Response, next: NextFunction)
       SELECT p.*, c.name as customer_name, c.customer_code, c.birth_date, c.phone
       FROM policies p
       JOIN customers c ON p.customer_id = c.id
-      WHERE p.id = $1 OR p.policy_number = $1
-    `, [id]);
+      WHERE p.id = $1::integer OR p.policy_number = $2
+    `, [parseInt(id) || 0, id]);
 
     if (policyResult.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Policy not found' });

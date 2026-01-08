@@ -347,15 +347,15 @@
                 <h4>테스트 계정 (개발용)</h4>
                 <div class="test-account-item">
                     <span class="role">관리자</span>
-                    <span class="credentials">admin / Admin123!</span>
+                    <span class="credentials">EMP001 / password123</span>
                 </div>
                 <div class="test-account-item">
                     <span class="role">팀장</span>
-                    <span class="credentials">teamlead1 / Team123!</span>
+                    <span class="credentials">EMP002 / password123</span>
                 </div>
                 <div class="test-account-item">
                     <span class="role">심사자</span>
-                    <span class="credentials">reviewer1 / User123!</span>
+                    <span class="credentials">EMP005 / password123</span>
                 </div>
             </div>
 
@@ -402,7 +402,7 @@
                 });
 
                 if (response.ok) {
-                    window.location.href = 'dashboard-enterprise.html';
+                    window.location.href = '/demo/dashboard-v2.html';
                 } else {
                     localStorage.removeItem('authToken');
                     localStorage.removeItem('userData');
@@ -490,7 +490,7 @@
                     showAlert('로그인 성공! 대시보드로 이동합니다.', 'success');
 
                     setTimeout(() => {
-                        window.location.href = 'dashboard-enterprise.html';
+                        window.location.href = '/demo/dashboard-v2.html';
                     }, 1000);
                 } else {
                     showAlert(data.error || '로그인에 실패했습니다.');
