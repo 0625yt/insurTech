@@ -52,6 +52,19 @@ export const getClaimList = async (req: Request, res: Response, next: NextFuncti
     const offset = (page - 1) * limit;
     const status = req.query.status as string | undefined;
     const search = req.query.search as string | undefined;
+    const sortBy = (req.query.sortBy as string) || 'created_at';
+    const sortDir = (req.query.sortDir as string) || 'desc';
+
+    const sortMap: Record<string, string> = {
+      created_at: 'c.created_at',
+      claim_date: 'c.claim_date',
+      total_claimed_amount: 'c.total_claimed_amount',
+      status: 'c.status',
+      ai_confidence_score: 'c.ai_confidence_score',
+      fraud_score: 'c.fraud_score'
+    };
+    const sortColumn = sortMap[sortBy] || sortMap.created_at;
+    const sortDirection = sortDir.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
     let query = `
       SELECT
@@ -86,7 +99,7 @@ export const getClaimList = async (req: Request, res: Response, next: NextFuncti
       query += ' WHERE ' + conditions.join(' AND ');
     }
 
-    query += ` ORDER BY c.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    query += ` ORDER BY ${sortColumn} ${sortDirection} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
     // 데이터 및 총 개수 조회

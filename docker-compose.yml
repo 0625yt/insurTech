@@ -16,6 +16,8 @@ services:
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./database/mock_data.sql:/docker-entrypoint-initdb.d/02-mock_data.sql
       - ./database/migration_v2_enterprise.sql:/docker-entrypoint-initdb.d/03-migration_v2_enterprise.sql
+      - ./database/migration_policy_terms.sql:/docker-entrypoint-initdb.d/04-migration_policy_terms.sql
+      - ./database/migration_ai_models.sql:/docker-entrypoint-initdb.d/05-migration_ai_models.sql
     networks:
       - insurtech-network
     healthcheck:

@@ -48,6 +48,42 @@
         .section-title { font-size: 1.1em; font-weight: 600; display: flex; align-items: center; gap: 10px; }
         .section-title i { color: var(--accent-blue); }
         .filter-group { display: flex; gap: 10px; align-items: center; }
+        .sort-controls { display: flex; align-items: center; gap: 8px; }
+        .sort-select, .page-size-select {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.85em;
+        }
+        .sort-dir-btn {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 6px 0;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .pagination-info { font-size: 0.85em; color: var(--text-secondary); }
+        .pagination-actions { display: flex; align-items: center; gap: 8px; }
+        .pagination-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .filter-tabs { display: flex; gap: 5px; background: var(--bg-primary); padding: 4px; border-radius: 8px; }
         .filter-tab { padding: 8px 16px; border-radius: 6px; font-size: 0.85em; cursor: pointer; color: var(--text-secondary); border: none; background: none; }
         .filter-tab:hover { color: var(--text-primary); }
@@ -390,6 +426,17 @@
                         <i class="ri-search-line"></i>
                         <input type="text" id="searchInput" placeholder="청구번호, 고객명, 증권번호 검색..." onkeyup="handleSearch(event)">
                     </div>
+                    <div class="sort-controls">
+                        <select id="sortBySelect" class="sort-select" onchange="handleSortChange()">
+                            <option value="created_at">최신순</option>
+                            <option value="claim_date">접수일순</option>
+                            <option value="total_claimed_amount">청구금액</option>
+                            <option value="ai_confidence_score">AI 신뢰도</option>
+                            <option value="fraud_score">사기 점수</option>
+                            <option value="status">상태</option>
+                        </select>
+                        <button id="sortDirBtn" class="sort-dir-btn" onclick="toggleSortDir()" title="정렬 방향">↓</button>
+                    </div>
                     <button class="btn-primary" onclick="loadData()" style="padding:10px 15px;"><i class="ri-refresh-line"></i></button>
                 </div>
             </div>
@@ -411,6 +458,21 @@
                     <tr><td colspan="9"><div class="loading"><div class="spinner"></div></div></td></tr>
                 </tbody>
             </table>
+            <div class="pagination">
+                <div class="pagination-info" id="paginationInfo">페이지 1 / 1 (총 0건)</div>
+                <div class="pagination-actions">
+                    <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">이전</button>
+                    <div id="pageButtons" class="pagination-actions"></div>
+                    <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">다음</button>
+                </div>
+                <div class="pagination-actions">
+                    <select id="pageSizeSelect" class="page-size-select" onchange="handlePageSizeChange()">
+                        <option value="10">10/페이지</option>
+                        <option value="20">20/페이지</option>
+                        <option value="50">50/페이지</option>
+                    </select>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -491,6 +553,12 @@
         let allClaimsData = [];
         let selectedClaimId = null;
         let currentFilter = 'all';
+        let currentPage = 1;
+        let pageSize = 10;
+        let sortBy = 'created_at';
+        let sortDir = 'desc';
+        let searchQuery = '';
+        let paginationMeta = { page: 1, totalPages: 1, total: 0, limit: 10 };
         let isLoading = false;
         let aiModelResults = [];
         let currentClaimData = null;
@@ -536,6 +604,9 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadPolicyTerms();
+            document.getElementById('pageSizeSelect').value = String(pageSize);
+            document.getElementById('sortBySelect').value = sortBy;
+            document.getElementById('sortDirBtn').textContent = sortDir === 'asc' ? '↑' : '↓';
             loadData();
             setupFilterTabs();
         });
@@ -574,14 +645,23 @@
             tbody.innerHTML = '<tr><td colspan="9"><div class="loading"><div class="spinner"></div></div></td></tr>';
 
             try {
-                const statusParam = currentFilter !== 'all' ? `&status=${currentFilter}` : '';
-                const res = await fetch(`${API_BASE}/claims?limit=50${statusParam}`);
+                const params = new URLSearchParams();
+                params.set('page', String(currentPage));
+                params.set('limit', String(pageSize));
+                params.set('sortBy', sortBy);
+                params.set('sortDir', sortDir);
+                if (currentFilter !== 'all') params.set('status', currentFilter);
+                if (searchQuery) params.set('search', searchQuery);
+
+                const res = await fetch(`${API_BASE}/claims?${params.toString()}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 if (data.success) {
                     claimsData = data.data;
                     allClaimsData = [...data.data];
+                    paginationMeta = data.pagination || paginationMeta;
                     renderClaims();
+                    updatePagination();
                 }
             } catch (e) {
                 console.error('Claims load error:', e);
@@ -937,6 +1017,8 @@
                     this.classList.add('active');
                     currentFilter = this.dataset.status;
                     document.getElementById('searchInput').value = '';
+                    searchQuery = '';
+                    currentPage = 1;
                     loadClaims();
                 });
             });
@@ -944,18 +1026,88 @@
 
         function handleSearch(e) {
             const query = e.target.value.trim().toLowerCase();
-            if (e.key === 'Escape') { e.target.value = ''; claimsData = [...allClaimsData]; renderClaims(); return; }
-            if (query === '') { claimsData = [...allClaimsData]; renderClaims(); return; }
+            if (e.key === 'Escape') {
+                e.target.value = '';
+                searchQuery = '';
+                currentPage = 1;
+                loadClaims();
+                return;
+            }
+            if (query === '') {
+                searchQuery = '';
+                currentPage = 1;
+                loadClaims();
+                return;
+            }
             if (e.key === 'Enter' || query.length >= 2) {
-                claimsData = allClaimsData.filter(c =>
-                    (c.claim_number || '').toLowerCase().includes(query) ||
-                    (c.customer_name || '').toLowerCase().includes(query) ||
-                    (c.policy_number || '').toLowerCase().includes(query) ||
-                    (c.diagnosis_name || '').toLowerCase().includes(query)
-                );
-                renderClaims();
+                searchQuery = query;
+                currentPage = 1;
+                loadClaims();
             }
         }
+
+        function handleSortChange() {
+            sortBy = document.getElementById('sortBySelect').value;
+            currentPage = 1;
+            loadClaims();
+        }
+
+        function toggleSortDir() {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            document.getElementById('sortDirBtn').textContent = sortDir === 'asc' ? '↑' : '↓';
+            currentPage = 1;
+            loadClaims();
+        }
+
+        function handlePageSizeChange() {
+            const selected = document.getElementById('pageSizeSelect').value;
+            pageSize = Number(selected) || 10;
+            currentPage = 1;
+            loadClaims();
+        }
+
+        function changePage(delta) {
+            const nextPage = currentPage + delta;
+            changePageTo(nextPage);
+        }
+
+        function changePageTo(page) {
+            if (page < 1 || page > paginationMeta.totalPages) return;
+            if (page === currentPage) return;
+            currentPage = page;
+            loadClaims();
+        }
+
+        function updatePagination() {
+            const info = document.getElementById('paginationInfo');
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+            const pageButtons = document.getElementById('pageButtons');
+
+            const totalPages = paginationMeta.totalPages || 1;
+            const total = paginationMeta.total || 0;
+            info.textContent = `페이지 ${currentPage} / ${totalPages} (총 ${total}건)`;
+            prevBtn.disabled = currentPage <= 1;
+            nextBtn.disabled = currentPage >= totalPages;
+            renderPageButtons(pageButtons, totalPages);
+        }
+
+        function renderPageButtons(container, totalPages) {
+            container.innerHTML = '';
+            for (let p = 1; p <= totalPages; p += 1) {
+                container.appendChild(createPageButton(p));
+            }
+        }
+
+        function createPageButton(page) {
+            const btn = document.createElement('button');
+            btn.className = 'pagination-btn';
+            btn.textContent = String(page);
+            btn.disabled = page === currentPage;
+            btn.onclick = () => changePageTo(page);
+            return btn;
+        }
+
 
         async function testSubmitClaim() {
             showToast('새 청구 심사 요청 중...');

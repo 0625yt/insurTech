@@ -1,161 +1,523 @@
--- ═══════════════════════════════════════════════════════════════
--- Mock 데이터 삽입
--- ═══════════════════════════════════════════════════════════════
+-- Mock data seeds (idempotent)
+-- Base seed data is inserted only when claims are empty.
+-- Extra policy_coverages are ensured for enterprise mock inserts.
 
--- 1. 보험 증권 Mock 데이터
-INSERT INTO insurance_policies (
-    policy_id,
-    policy_pdf_url,
-    policy_type,
-    coverage_start_date,
-    coverage_end_date,
-    policyholder_name,
-    policyholder_birth,
-    policyholder_phone,
-    premium_status,
-    policy_terms_text
-) VALUES
-(
-    'POL-2024-001',
-    'https://example.com/policies/POL-2024-001.pdf',
-    '실손의료보험',
-    '2024-01-01',
-    '2034-12-31',
-    '홍길동',
-    '1990-01-15',
-    '010-1234-5678',
-    'active',
-    E'【제1관 일반사항】\n\n제1조 (목적)\n본 약관은 보험계약자와 보험회사 간 실손의료보험 계약에 관한 사항을 정함을 목적으로 합니다.\n\n제2조 (용어의 정의)\n① "피보험자"라 함은 보험사고의 대상이 되는 사람을 말합니다.\n② "보험금"이라 함은 피보험자에게 보험사고가 발생한 경우 보험회사가 지급하는 금액을 말합니다.\n③ "입원"이라 함은 의사의 치료가 필요하다고 인정한 경우로서 자택 등에서의 치료가 곤란하여 병원 등의 의료기관에 입실하여 의사의 관리 하에 치료에 전념하는 것을 말합니다.\n④ "통원"이라 함은 병원 등의 의료기관에 입원하지 않고 병원 등을 방문하여 의사의 치료를 받는 것을 말합니다.\n\n【제2관 보장내용】\n\n제3조 (보장종류 및 보험금의 지급사유)\n보험회사는 피보험자가 다음 각 호의 보험금 지급사유에 해당할 때 보험수익자에게 보험금을 지급합니다.\n\n1. 상해입원의료비 담보\n피보험자가 보험기간 중 상해로 인하여 병원에 입원하여 치료를 받은 경우, 입원의료비의 90%를 보험금으로 지급합니다.\n- 보장한도: 연간 5,000만원\n- 1회 입원당 한도: 500만원\n- 본인부담금: 입원의료비의 10%\n- 면책기간: 없음\n\n2. 질병입원의료비 담보\n피보험자가 보험기간 중 질병으로 인하여 병원에 입원하여 치료를 받은 경우, 입원의료비의 90%를 보험금으로 지급합니다.\n- 보장한도: 연간 5,000만원\n- 1회 입원당 한도: 500만원\n- 본인부담금: 입원의료비의 10%\n- 면책기간: 계약일로부터 90일 (단, 상해로 인한 질병은 면책기간 없음)\n\n3. 상해통원의료비 담보\n피보험자가 보험기간 중 상해로 인하여 병원에 통원하여 치료를 받은 경우, 통원의료비를 보험금으로 지급합니다.\n- 외래: 방문 1회당 공제금액 10,000원을 차감한 금액의 90% (회당 한도 25만원)\n- 처방조제비: 건당 공제금액 8,000원을 차감한 금액의 90% (건당 한도 5만원)\n- 보장한도: 연간 30만원\n- 면책기간: 없음\n\n4. 질병통원의료비 담보\n피보험자가 보험기간 중 질병으로 인하여 병원에 통원하여 치료를 받은 경우, 통원의료비를 보험금으로 지급합니다.\n- 외래: 방문 1회당 공제금액 10,000원을 차감한 금액의 90% (회당 한도 25만원)\n- 처방조제비: 건당 공제금액 8,000원을 차감한 금액의 90% (건당 한도 5만원)\n- 보장한도: 연간 30만원\n- 면책기간: 계약일로부터 90일\n\n5. 수술비 담보\n피보험자가 보험기간 중 상해 또는 질병의 치료를 목적으로 수술을 받은 경우, 수술 1회당 100만원을 보험금으로 지급합니다.\n- 보장한도: 연간 5회까지\n- 면책기간: 질병수술은 계약일로부터 90일\n\n제4조 (보험금을 지급하지 않는 사유)\n보험회사는 다음 각 호의 경우 보험금을 지급하지 않습니다.\n\n1. 피보험자가 고의로 자신을 해친 경우\n2. 보험수익자가 고의로 피보험자를 해친 경우\n3. 계약자가 고의로 피보험자를 해친 경우\n4. 피보험자의 임신, 출산(제왕절개 포함), 산후기\n5. 치과치료, 한방치료에서 발생한 의료비 (단, 약관에서 보장하는 경우 제외)\n6. 건강검진, 예방접종, 미용 목적의 치료\n7. 전쟁, 외국의 무력행사, 혁명, 내란, 사변, 폭동\n\n제5조 (보험금의 청구)\n① 보험수익자는 다음 각 호의 서류를 제출하고 보험금을 청구하여야 합니다.\n1. 보험금 청구서\n2. 신분증 사본\n3. 진단서 또는 소견서\n4. 영수증 원본\n5. 기타 보험회사가 요구하는 서류\n\n② 보험회사는 청구서류를 접수한 날로부터 3영업일 이내에 보험금을 지급합니다.\n\n제6조 (중복보장)\n피보험자가 동일한 보험사고에 대하여 다른 보험계약이 있는 경우, 보험회사는 각 보험계약의 보험금 한도액 비율에 따라 보험금을 지급합니다.\n\n제7조 (계약의 소멸)\n① 보험기간 중 피보험자가 사망한 경우 보험계약은 소멸합니다.\n② 보험료 납입이 3개월 이상 연체된 경우 계약이 해지될 수 있습니다.'
-),
-(
-    'POL-2024-002',
-    'https://example.com/policies/POL-2024-002.pdf',
-    '암보험 (정액형)',
-    '2023-06-01',
-    '2033-05-31',
-    '김영희',
-    '1985-03-20',
-    '010-9876-5432',
-    'active',
-    E'【암보험 약관】\n\n제1조 (암진단비)\n피보험자가 보험기간 중 암으로 진단 확정되었을 때, 최초 1회에 한하여 다음의 암진단비를 지급합니다.\n\n1. 일반암 진단비: 3,000만원\n   - 대상: C00~C97 코드에 해당하는 암 (단, 유사암, 소액암, 갑상선암 제외)\n   - 면책기간: 계약일로부터 90일\n\n2. 유사암 진단비: 500만원\n   - 대상: 기타피부암, 갑상선암, 경계성종양, 제자리암\n   - 면책기간: 계약일로부터 90일\n\n3. 소액암 진단비: 1,000만원\n   - 대상: 유방암, 자궁암, 전립선암, 방광암\n   - 면책기간: 계약일로부터 90일\n\n제2조 (암입원비)\n피보험자가 암으로 진단 확정되고 그 치료를 목적으로 4일 이상 계속 입원한 경우, 입원일수 1일당 10만원을 지급합니다.\n- 보장한도: 연간 180일까지\n- 면책기간: 계약일로부터 90일\n\n제3조 (암수술비)\n피보험자가 암의 치료를 목적으로 수술을 받은 경우, 수술 1회당 500만원을 지급합니다.\n- 보장한도: 연간 5회까지\n- 면책기간: 계약일로부터 90일\n\n제4조 (면책사항)\n다음의 경우 보험금을 지급하지 않습니다.\n1. 면책기간 내 발생한 암\n2. 계약 전 암 병력이 있는 경우'
-),
-(
-    'POL-2024-003',
-    'https://example.com/policies/POL-2024-003.pdf',
-    '종합보험 (실손+정액)',
-    '2024-03-15',
-    '2034-03-14',
-    '이철수',
-    '1978-07-10',
-    '010-5555-6666',
-    'paid',
-    E'【종합보험 약관】\n\n본 보험은 실손의료비와 정액형 담보를 결합한 상품입니다.\n\n[실손의료비 부분]\n- 입원의료비: 연간 1억원 한도, 본인부담금 20%\n- 통원의료비: 연간 50만원 한도, 방문당 공제금액 2만원\n\n[정액형 담보 부분]\n1. 입원일당: 입원 4일째부터 1일당 5만원 (연간 180일 한도)\n2. 수술비: 수술 1회당 100만원 (연간 3회 한도)\n3. 골절진단비: 골절 진단 시 50만원 (연간 2회 한도)\n\n[공통 면책사항]\n- 미용, 성형 목적\n- 치과치료 (단, 사고로 인한 치아 파절은 보장)\n- 한방치료 중 보장대상 외 항목\n- 건강검진, 예방접종'
-);
+DO $$
+BEGIN
+        INSERT INTO coverage_types (
+            code, name, category, calculation_type, default_payout_rate, default_deductible, description
+        ) VALUES
+        ('REAL_LOSS_HOSP_INS', 'Inpatient Medical (Insured)', 'REAL_LOSS', 'PERCENTAGE', 90, 100000, 'Inpatient insured medical'),
+        ('REAL_LOSS_HOSP_UNINS', 'Inpatient Medical (Uninsured)', 'REAL_LOSS', 'PERCENTAGE', 80, 200000, 'Inpatient uninsured medical'),
+        ('REAL_LOSS_OUT_INS', 'Outpatient Medical (Insured)', 'REAL_LOSS', 'PERCENTAGE', 90, 10000, 'Outpatient insured medical'),
+        ('REAL_LOSS_OUT_UNINS', 'Outpatient Medical (Uninsured)', 'REAL_LOSS', 'PERCENTAGE', 80, 30000, 'Outpatient uninsured medical'),
+        ('FIXED_HOSP_DAILY', 'Hospital Daily Allowance', 'FIXED', 'DAILY', 100, 0, 'Daily inpatient allowance'),
+        ('FIXED_SURGERY_1', 'Surgery Class 1', 'FIXED', 'LUMP_SUM', 100, 0, 'Surgery class 1'),
+        ('FIXED_SURGERY_2', 'Surgery Class 2', 'FIXED', 'LUMP_SUM', 100, 0, 'Surgery class 2'),
+        ('FIXED_SURGERY_3', 'Surgery Class 3', 'FIXED', 'LUMP_SUM', 100, 0, 'Surgery class 3'),
+        ('FIXED_SURGERY_4', 'Surgery Class 4', 'FIXED', 'LUMP_SUM', 100, 0, 'Surgery class 4'),
+        ('FIXED_SURGERY_5', 'Surgery Class 5', 'FIXED', 'LUMP_SUM', 100, 0, 'Surgery class 5'),
+        ('FIXED_DIAGNOSIS', 'Diagnosis Benefit', 'FIXED', 'LUMP_SUM', 100, 0, 'Diagnosis lump sum'),
+        ('FIXED_CANCER', 'Cancer Diagnosis Benefit', 'FIXED', 'LUMP_SUM', 100, 0, 'Cancer diagnosis lump sum'),
+        ('FIXED_CI', 'Critical Illness Benefit', 'FIXED', 'LUMP_SUM', 100, 0, 'Critical illness lump sum')
+        ON CONFLICT (code) DO NOTHING;
 
+        INSERT INTO diagnosis_codes (
+            code, name, category, chapter, is_critical_illness, is_cancer,
+            default_treatment_days, fraud_risk_base, requires_surgery, chronic_disease
+        ) VALUES
+        ('K35.0', 'Acute appendicitis', 'DISEASE', 'Digestive', FALSE, FALSE, 7, 0.10, TRUE, FALSE),
+        ('K80.0', 'Cholelithiasis', 'DISEASE', 'Digestive', FALSE, FALSE, 10, 0.12, TRUE, FALSE),
+        ('J18.9', 'Pneumonia', 'DISEASE', 'Respiratory', FALSE, FALSE, 5, 0.08, FALSE, FALSE),
+        ('M54.5', 'Low back pain', 'DISEASE', 'Musculoskeletal', FALSE, FALSE, 7, 0.20, FALSE, TRUE),
+        ('I21.9', 'Acute myocardial infarction', 'DISEASE', 'Circulatory', TRUE, FALSE, 14, 0.15, TRUE, TRUE),
+        ('H25.1', 'Senile cataract', 'DISEASE', 'Eye', FALSE, FALSE, 3, 0.05, TRUE, FALSE),
+        ('S82.0', 'Patella fracture', 'INJURY', 'Injury', FALSE, FALSE, 21, 0.18, TRUE, FALSE)
+        ON CONFLICT (code) DO NOTHING;
 
--- 2. 담보 정의 Mock 데이터
-INSERT INTO coverage_definitions (
-    coverage_code,
-    coverage_name,
-    coverage_type,
-    policy_type,
-    benefit_amount,
-    benefit_unit,
-    conditions,
-    exclusions,
-    waiting_period_days,
-    max_payout,
-    description
-) VALUES
-(
-    'COV-001',
-    '상해입원의료비',
-    '실손',
-    '실손의료보험',
-    '90',
-    '%',
-    ARRAY['상해로 인한 입원', '4일 이상 계속 입원', '의사의 입원 소견 필요'],
-    ARRAY['고의적 자해', '미용 목적', '건강검진'],
-    0,
-    50000000.00,
-    '상해로 인한 입원 시 입원의료비의 90%를 보장합니다. 연간 한도는 5,000만원입니다.'
-),
-(
-    'COV-002',
-    '질병입원의료비',
-    '실손',
-    '실손의료보험',
-    '90',
-    '%',
-    ARRAY['질병으로 인한 입원', '4일 이상 계속 입원', '의사의 입원 소견 필요'],
-    ARRAY['임신, 출산', '치과치료', '한방치료 일부'],
-    90,
-    50000000.00,
-    '질병으로 인한 입원 시 입원의료비의 90%를 보장합니다. 면책기간 90일이 적용됩니다.'
-),
-(
-    'COV-003',
-    '상해통원의료비',
-    '실손',
-    '실손의료보험',
-    '90',
-    '%',
-    ARRAY['상해로 인한 통원', '공제금액 차감 후 지급'],
-    ARRAY['예방접종', '건강검진'],
-    0,
-    300000.00,
-    '상해로 인한 외래 및 처방조제비를 보장합니다. 외래 회당 1만원, 처방조제비 건당 8천원 공제 후 90% 지급.'
-),
-(
-    'COV-004',
-    '수술비',
-    '정액',
-    '실손의료보험',
-    '1000000',
-    '원',
-    ARRAY['상해 또는 질병으로 인한 수술', '의사의 수술 소견 필요'],
-    ARRAY['미용 목적 수술'],
-    0,
-    5000000.00,
-    '수술 1회당 100만원을 지급합니다. 연간 최대 5회까지 보장.'
-),
-(
-    'COV-005',
-    '일반암진단비',
-    '정액',
-    '암보험',
-    '30000000',
-    '원',
-    ARRAY['C00~C97 코드 암 진단', '최초 1회 지급'],
-    ARRAY['유사암', '소액암', '갑상선암'],
-    90,
-    30000000.00,
-    '일반암 진단 시 3,000만원을 1회 지급합니다.'
-),
-(
-    'COV-006',
-    '암입원비',
-    '정액',
-    '암보험',
-    '100000',
-    '원/일',
-    ARRAY['암 진단 확정', '4일 이상 계속 입원'],
-    ARRAY['면책기간 내 발생'],
-    90,
-    18000000.00,
-    '암으로 인한 입원 시 1일당 10만원 지급. 연간 최대 180일.'
-);
+        INSERT INTO surgery_classification (
+            code, name, classification, category, related_diagnosis_codes, average_cost, average_hospital_days
+        ) VALUES
+        ('S0401', 'Appendectomy (laparoscopic)', 2, 'General', ARRAY['K35.0'], 600000, 4),
+        ('S0501', 'Cholecystectomy (laparoscopic)', 2, 'General', ARRAY['K80.0'], 1000000, 3),
+        ('S0802', 'PCI', 4, 'Cardiology', ARRAY['I21.9'], 3000000, 7),
+        ('S1101', 'Cataract surgery', 1, 'Ophthalmology', ARRAY['H25.1'], 1500000, 1),
+        ('S0902', 'Knee arthroplasty', 4, 'Orthopedics', ARRAY['S82.0'], 4000000, 6)
+        ON CONFLICT (code) DO NOTHING;
 
+        INSERT INTO fraud_patterns (
+            pattern_code, pattern_name, description, detection_rule, risk_weight, action_required
+        ) VALUES
+        ('FRD001', 'Multiple claims in short period', 'Short-term multiple claims', '{}'::jsonb, 0.30, 'MANUAL_REVIEW'),
+        ('FRD002', 'Repeated back pain claims', 'Repeated back pain claims', '{}'::jsonb, 0.40, 'INVESTIGATE'),
+        ('FRD003', 'Weekend admission pattern', 'Weekend admission pattern', '{}'::jsonb, 0.25, 'REVIEW'),
+        ('FRD004', 'Single high amount claim', 'High amount single claim', '{}'::jsonb, 0.20, 'REVIEW'),
+        ('FRD005', 'Early claim after policy', 'Claim within 12 months', '{}'::jsonb, 0.25, 'REVIEW')
+        ON CONFLICT (pattern_code) DO NOTHING;
 
--- 3. AI 모델 통계 Mock 데이터 (시드 데이터)
-INSERT INTO ai_model_feedback (claim_case_id, model_name, task_type, is_correct, confidence_score, response_time_ms, feedback_by)
-VALUES
-    ('CLM-INIT-001', 'gpt', 'ocr', true, 0.95, 2800, 'system'),
-    ('CLM-INIT-001', 'claude', 'ocr', true, 0.97, 2100, 'system'),
-    ('CLM-INIT-001', 'gemini', 'ocr', true, 0.88, 1900, 'system'),
-    ('CLM-INIT-002', 'gpt', 'ocr', true, 0.92, 3000, 'system'),
-    ('CLM-INIT-002', 'claude', 'ocr', true, 0.94, 2200, 'system'),
-    ('CLM-INIT-002', 'gemini', 'ocr', false, 0.85, 1800, 'system'),
-    ('CLM-INIT-003', 'gpt', 'ocr', false, 0.88, 2900, 'system'),
-    ('CLM-INIT-003', 'claude', 'ocr', true, 0.96, 2000, 'system'),
-    ('CLM-INIT-003', 'gemini', 'ocr', true, 0.90, 2100, 'system');
+        INSERT INTO customers (
+            customer_code, name, birth_date, gender, phone, email, risk_grade, risk_score
+        ) VALUES
+        ('CUST-0001', 'Gil-dong Hong', '1990-01-15', 'M', '010-1234-5678', 'hong@example.com', 'NORMAL', 0.10),
+        ('CUST-0002', 'Cheol-su Kim', '1985-03-20', 'M', '010-9876-5432', 'kim@example.com', 'NORMAL', 0.08),
+        ('CUST-0003', 'Young-hee Lee', '1992-07-08', 'F', '010-5555-6666', 'lee@example.com', 'NORMAL', 0.15),
+        ('CUST-0004', 'Min-su Park', '1988-11-02', 'M', '010-2222-3333', 'park@example.com', 'WATCH', 0.68),
+        ('CUST-0005', 'Su-jin Jung', '1979-05-14', 'F', '010-7777-8888', 'jung@example.com', 'NORMAL', 0.05),
+        ('CUST-0006', 'Young-mi Han', '1968-09-21', 'F', '010-1111-2222', 'han@example.com', 'NORMAL', 0.12),
+        ('CUST-0007', 'Tae-ho Choi', '1996-12-03', 'M', '010-3333-4444', 'choi@example.com', 'NORMAL', 0.07)
+        ON CONFLICT (customer_code) DO NOTHING;
+
+        INSERT INTO policies (
+            policy_number, customer_id, product_name, product_code, status, contract_date,
+            coverage_start_date, coverage_end_date, premium_amount, premium_status,
+            exemption_end_date, reduction_end_date, reduction_rate
+        ) VALUES
+        ('POL-2024-001', (SELECT id FROM customers WHERE customer_code = 'CUST-0001'), 'Medical Comprehensive', 'PRD001', 'ACTIVE', '2023-01-15',
+         '2023-01-15', '2043-01-14', 85000, 'PAID', '2023-04-15', '2024-01-15', 50),
+        ('POL-2024-002', (SELECT id FROM customers WHERE customer_code = 'CUST-0002'), 'Medical Comprehensive', 'PRD001', 'ACTIVE', '2023-06-01',
+         '2023-06-01', '2043-05-31', 92000, 'PAID', '2023-09-01', '2024-06-01', 50),
+        ('POL-2024-003', (SELECT id FROM customers WHERE customer_code = 'CUST-0003'), 'Medical Plus', 'PRD002', 'ACTIVE', '2024-01-10',
+         '2024-01-10', '2044-01-09', 65000, 'PAID', '2024-04-10', '2025-01-10', 50),
+        ('POL-2024-004', (SELECT id FROM customers WHERE customer_code = 'CUST-0004'), 'Medical Comprehensive', 'PRD001', 'ACTIVE', '2022-03-20',
+         '2022-03-20', '2042-03-19', 78000, 'OVERDUE', '2022-06-20', '2023-03-20', 50),
+        ('POL-2024-005', (SELECT id FROM customers WHERE customer_code = 'CUST-0005'), 'Medical Comprehensive', 'PRD001', 'ACTIVE', '2023-09-05',
+         '2023-09-05', '2043-09-04', 88000, 'PAID', '2023-12-05', '2024-09-05', 50),
+        ('POL-2024-006', (SELECT id FROM customers WHERE customer_code = 'CUST-0006'), 'Cataract Plan', 'PRD003', 'ACTIVE', '2021-05-01',
+         '2021-05-01', '2041-04-30', 120000, 'PAID', '2021-08-01', '2022-05-01', 50),
+        ('POL-2024-007', (SELECT id FROM customers WHERE customer_code = 'CUST-0007'), 'Medical Comprehensive', 'PRD001', 'ACTIVE', '2024-06-01',
+         '2024-06-01', '2044-05-31', 75000, 'PAID', '2024-09-01', '2025-06-01', 50)
+        ON CONFLICT (policy_number) DO NOTHING;
+
+        -- policy_coverages with fixed IDs to align with claim_items mock
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 1, (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+               'Inpatient Insured', 'DIS_HOSP_INS', 30000000, 'MAX', 100000, 10, 90, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 1);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 2, (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_UNINS'),
+               'Inpatient Uninsured', 'DIS_HOSP_UNINS', 30000000, 'MAX', 200000, 0, 80, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 2);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 3, (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_HOSP_DAILY'),
+               'Hospital Daily', 'DIS_HOSP_DAILY', 50000, 'FIXED', 0, 0, 100, 30, 1500000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 3);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 4, (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_SURGERY_1'),
+               'Surgery Class 1', 'DIS_SURG_1', 300000, 'FIXED', 0, 0, 100, NULL, 3000000, 0, 1
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 4);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 5, (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_SURGERY_2'),
+               'Surgery Class 2', 'DIS_SURG_2', 600000, 'FIXED', 0, 0, 100, NULL, 3000000, 0, 2
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 5);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 6, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+               'Inpatient Insured', 'DIS_HOSP_INS', 30000000, 'MAX', 100000, 10, 90, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 6);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 7, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_UNINS'),
+               'Inpatient Uninsured', 'DIS_HOSP_UNINS', 30000000, 'MAX', 200000, 0, 80, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 7);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 8, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_INS'),
+               'Outpatient Insured', 'OUT_INS', 200000, 'FIXED', 10000, 0, 90, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 8);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 9, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+               'Inpatient Insured', 'DIS_HOSP_INS', 30000000, 'MAX', 100000, 10, 90, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 9);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 10, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_UNINS'),
+               'Inpatient Uninsured', 'DIS_HOSP_UNINS', 30000000, 'MAX', 200000, 0, 80, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 10);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 11, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_HOSP_DAILY'),
+               'Hospital Daily', 'DIS_HOSP_DAILY', 100000, 'FIXED', 0, 0, 100, 30, 3000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 11);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 12, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_SURGERY_1'),
+               'Surgery Class 1', 'DIS_SURG_1', 500000, 'FIXED', 0, 0, 100, NULL, 5000000, 0, 1
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 12);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 13, (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_SURGERY_2'),
+               'Surgery Class 2', 'DIS_SURG_2', 1000000, 'FIXED', 0, 0, 100, NULL, 5000000, 0, 2
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 13);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 14, (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+               'Inpatient Insured', 'DIS_HOSP_INS', 30000000, 'MAX', 100000, 10, 90, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 14);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 15, (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_INS'),
+               'Outpatient Insured', 'OUT_INS', 200000, 'FIXED', 10000, 0, 90, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 15);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 16, (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_UNINS'),
+               'Outpatient Uninsured', 'OUT_UNINS', 200000, 'FIXED', 30000, 0, 80, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 16);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 17, (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_INS'),
+               'Outpatient Insured', 'OUT_INS', 200000, 'FIXED', 10000, 0, 90, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 17);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 18, (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_INS'),
+               'Outpatient Insured', 'OUT_INS', 200000, 'FIXED', 10000, 0, 90, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 18);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 19, (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_UNINS'),
+               'Outpatient Uninsured', 'OUT_UNINS', 200000, 'FIXED', 30000, 0, 80, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 19);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 20, (SELECT id FROM policies WHERE policy_number = 'POL-2024-004'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+               'Inpatient Insured', 'DIS_HOSP_INS', 30000000, 'MAX', 100000, 10, 90, NULL, 30000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 20);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 21, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+               'Inpatient Insured', 'DIS_HOSP_INS', 50000000, 'MAX', 100000, 10, 90, NULL, 50000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 21);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 22, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_UNINS'),
+               'Inpatient Uninsured', 'DIS_HOSP_UNINS', 50000000, 'MAX', 200000, 0, 80, NULL, 50000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 22);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 23, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_HOSP_DAILY'),
+               'Hospital Daily', 'DIS_HOSP_DAILY', 100000, 'FIXED', 0, 0, 100, 30, 7000000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 23);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 24, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+               (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_INS'),
+               'Outpatient Insured', 'OUT_INS', 200000, 'FIXED', 10000, 0, 90, NULL, 2400000, 0, NULL
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 24);
+
+        INSERT INTO policy_coverages (
+            id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+            deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+            annual_limit, used_annual_amount, surgery_classification
+        )
+        SELECT 25, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+               (SELECT id FROM coverage_types WHERE code = 'FIXED_SURGERY_4'),
+               'Surgery Class 4', 'DIS_SURG_4', 3000000, 'FIXED', 0, 0, 100, NULL, 30000000, 0, 4
+        WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 25);
+
+        INSERT INTO claims (
+            claim_number, policy_id, customer_id, claim_type, claim_subtype,
+            treatment_start_date, treatment_end_date, hospital_name, hospital_type,
+            diagnosis_code, diagnosis_name, surgery_code, surgery_name, surgery_classification,
+            hospitalization_days, total_medical_expense, insured_expense, uninsured_expense,
+            total_claimed_amount, status
+        ) VALUES
+        ('CLM-2024-00001', (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0001'),
+         'HOSPITALIZATION', 'DISEASE', '2024-12-10', '2024-12-14', 'Seoul University Hospital', 'GENERAL',
+         'K35.0', 'Acute appendicitis', 'S0401', 'Appendectomy', 2, 4, 1520000, 1200000, 320000, 1520000, 'RECEIVED'),
+        ('CLM-2024-00002', (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0002'),
+         'SURGERY', 'DISEASE', '2024-12-12', '2024-12-15', 'Samsung Medical Center', 'GENERAL',
+         'K80.0', 'Cholelithiasis', 'S0501', 'Cholecystectomy', 2, 3, 3500000, 2800000, 700000, 3500000, 'RECEIVED'),
+        ('CLM-2024-00003', (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0003'),
+         'OUTPATIENT', 'DISEASE', '2024-12-15', '2024-12-15', 'Gangnam Severance Hospital', 'GENERAL',
+         'J18.9', 'Pneumonia', NULL, NULL, NULL, 0, 85000, 70000, 15000, 85000, 'APPROVED'),
+        ('CLM-2024-00004', (SELECT id FROM policies WHERE policy_number = 'POL-2024-004'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0004'),
+         'HOSPITALIZATION', 'DISEASE', '2024-12-01', '2024-12-10', 'Bundang Seoul National Univ. Hospital', 'GENERAL',
+         'M54.5', 'Low back pain', NULL, NULL, NULL, 9, 2100000, 1500000, 600000, 2100000, 'PENDING_REVIEW'),
+        ('CLM-2024-00005', (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0005'),
+         'SURGERY', 'DISEASE', '2024-12-08', '2024-12-15', 'Asan Medical Center', 'GENERAL',
+         'I21.9', 'Acute myocardial infarction', 'S0802', 'PCI', 4, 7, 12000000, 10000000, 2000000, 12000000, 'AI_PROCESSING'),
+        ('CLM-2024-00008', (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0001'),
+         'OUTPATIENT', 'DISEASE', '2024-11-20', '2024-11-20', 'Seoul University Hospital', 'GENERAL',
+         'J18.9', 'Pneumonia', NULL, NULL, NULL, 0, 120000, 90000, 30000, 120000, 'APPROVED'),
+        ('CLM-2024-00009', (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0002'),
+         'HOSPITALIZATION', 'DISEASE', '2024-11-05', '2024-11-10', 'Samsung Medical Center', 'GENERAL',
+         'M54.5', 'Low back pain', NULL, NULL, NULL, 5, 900000, 700000, 200000, 900000, 'PENDING_REVIEW'),
+        ('CLM-2024-00010', (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0003'),
+         'SURGERY', 'DISEASE', '2024-10-14', '2024-10-16', 'Gangnam Severance Hospital', 'GENERAL',
+         'K80.0', 'Cholelithiasis', 'S0501', 'Cholecystectomy', 2, 2, 2800000, 2100000, 700000, 2800000, 'RECEIVED'),
+        ('CLM-2024-00011', (SELECT id FROM policies WHERE policy_number = 'POL-2024-004'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0004'),
+         'OUTPATIENT', 'DISEASE', '2024-09-02', '2024-09-02', 'Bundang Seoul National Univ. Hospital', 'GENERAL',
+         'J18.9', 'Pneumonia', NULL, NULL, NULL, 0, 60000, 40000, 20000, 60000, 'REJECTED'),
+        ('CLM-2024-00012', (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0005'),
+         'HOSPITALIZATION', 'DISEASE', '2024-08-10', '2024-08-17', 'Asan Medical Center', 'GENERAL',
+         'I21.9', 'Acute myocardial infarction', NULL, NULL, NULL, 7, 8000000, 6400000, 1600000, 8000000, 'AI_PROCESSING'),
+        ('CLM-2024-00013', (SELECT id FROM policies WHERE policy_number = 'POL-2024-006'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0006'),
+         'SURGERY', 'DISEASE', '2024-07-12', '2024-07-12', 'Seoul University Hospital', 'GENERAL',
+         'H25.1', 'Senile cataract', 'S1101', 'Cataract surgery', 1, 0, 1500000, 1200000, 300000, 1500000, 'RECEIVED'),
+        ('CLM-2024-00014', (SELECT id FROM policies WHERE policy_number = 'POL-2024-007'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0007'),
+         'HOSPITALIZATION', 'ACCIDENT', '2024-06-03', '2024-06-09', 'Gangnam Severance Hospital', 'GENERAL',
+         'S82.0', 'Patella fracture', 'S0902', 'Knee arthroplasty', 4, 6, 5000000, 3800000, 1200000, 5000000, 'PENDING_REVIEW'),
+        ('CLM-2024-00015', (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0001'),
+         'OUTPATIENT', 'DISEASE', '2024-05-22', '2024-05-22', 'Seoul University Hospital', 'GENERAL',
+         'K35.0', 'Acute appendicitis', NULL, NULL, NULL, 0, 95000, 76000, 19000, 95000, 'APPROVED'),
+        ('CLM-2024-00016', (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0002'),
+         'SURGERY', 'DISEASE', '2024-04-11', '2024-04-12', 'Samsung Medical Center', 'GENERAL',
+         'K35.0', 'Acute appendicitis', 'S0401', 'Appendectomy', 2, 2, 1200000, 900000, 300000, 1200000, 'APPROVED'),
+        ('CLM-2024-00017', (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0003'),
+         'HOSPITALIZATION', 'DISEASE', '2024-03-05', '2024-03-08', 'Gangnam Severance Hospital', 'GENERAL',
+         'J18.9', 'Pneumonia', NULL, NULL, NULL, 3, 700000, 560000, 140000, 700000, 'RECEIVED'),
+        ('CLM-2024-00018', (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0005'),
+         'OUTPATIENT', 'DISEASE', '2024-02-09', '2024-02-09', 'Asan Medical Center', 'GENERAL',
+         'M54.5', 'Low back pain', NULL, NULL, NULL, 0, 50000, 35000, 15000, 50000, 'REJECTED'),
+        ('CLM-2024-00019', (SELECT id FROM policies WHERE policy_number = 'POL-2024-006'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0006'),
+         'OUTPATIENT', 'DISEASE', '2024-01-18', '2024-01-18', 'Seoul University Hospital', 'GENERAL',
+         'H25.1', 'Senile cataract', NULL, NULL, NULL, 0, 80000, 64000, 16000, 80000, 'APPROVED'),
+        ('CLM-2024-00020', (SELECT id FROM policies WHERE policy_number = 'POL-2024-007'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0007'),
+         'SURGERY', 'ACCIDENT', '2024-01-05', '2024-01-07', 'Gangnam Severance Hospital', 'GENERAL',
+         'S82.0', 'Patella fracture', 'S0902', 'Knee arthroplasty', 4, 2, 6000000, 4800000, 1200000, 6000000, 'AI_PROCESSING'),
+        ('CLM-2024-00021', (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0001'),
+         'HOSPITALIZATION', 'DISEASE', '2023-12-11', '2023-12-14', 'Seoul University Hospital', 'GENERAL',
+         'K35.0', 'Acute appendicitis', 'S0401', 'Appendectomy', 2, 3, 1300000, 1000000, 300000, 1300000, 'APPROVED'),
+        ('CLM-2024-00022', (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0002'),
+         'OUTPATIENT', 'DISEASE', '2023-12-03', '2023-12-03', 'Samsung Medical Center', 'GENERAL',
+         'J18.9', 'Pneumonia', NULL, NULL, NULL, 0, 70000, 52000, 18000, 70000, 'RECEIVED'),
+        ('CLM-2024-00023', (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0003'),
+         'SURGERY', 'DISEASE', '2023-11-18', '2023-11-20', 'Gangnam Severance Hospital', 'GENERAL',
+         'K80.0', 'Cholelithiasis', 'S0501', 'Cholecystectomy', 2, 2, 2600000, 2000000, 600000, 2600000, 'APPROVED'),
+        ('CLM-2024-00024', (SELECT id FROM policies WHERE policy_number = 'POL-2024-004'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0004'),
+         'HOSPITALIZATION', 'DISEASE', '2023-11-01', '2023-11-06', 'Bundang Seoul National Univ. Hospital', 'GENERAL',
+         'M54.5', 'Low back pain', NULL, NULL, NULL, 5, 1100000, 850000, 250000, 1100000, 'PENDING_REVIEW'),
+        ('CLM-2024-00025', (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0005'),
+         'OUTPATIENT', 'DISEASE', '2023-10-22', '2023-10-22', 'Asan Medical Center', 'GENERAL',
+         'I21.9', 'Acute myocardial infarction', NULL, NULL, NULL, 0, 140000, 110000, 30000, 140000, 'REJECTED'),
+        ('CLM-2024-00026', (SELECT id FROM policies WHERE policy_number = 'POL-2024-006'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0006'),
+         'SURGERY', 'DISEASE', '2023-10-05', '2023-10-05', 'Seoul University Hospital', 'GENERAL',
+         'H25.1', 'Senile cataract', 'S1101', 'Cataract surgery', 1, 0, 1400000, 1100000, 300000, 1400000, 'RECEIVED'),
+        ('CLM-2024-00027', (SELECT id FROM policies WHERE policy_number = 'POL-2024-007'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0007'),
+         'HOSPITALIZATION', 'ACCIDENT', '2023-09-12', '2023-09-16', 'Gangnam Severance Hospital', 'GENERAL',
+         'S82.0', 'Patella fracture', 'S0902', 'Knee arthroplasty', 4, 4, 4200000, 3300000, 900000, 4200000, 'PENDING_REVIEW'),
+        ('CLM-2024-00028', (SELECT id FROM policies WHERE policy_number = 'POL-2024-001'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0001'),
+         'OUTPATIENT', 'DISEASE', '2023-09-01', '2023-09-01', 'Seoul University Hospital', 'GENERAL',
+         'J18.9', 'Pneumonia', NULL, NULL, NULL, 0, 65000, 48000, 17000, 65000, 'APPROVED'),
+        ('CLM-2024-00029', (SELECT id FROM policies WHERE policy_number = 'POL-2024-002'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0002'),
+         'HOSPITALIZATION', 'DISEASE', '2023-08-19', '2023-08-23', 'Samsung Medical Center', 'GENERAL',
+         'K35.0', 'Acute appendicitis', 'S0401', 'Appendectomy', 2, 4, 1450000, 1100000, 350000, 1450000, 'RECEIVED'),
+        ('CLM-2024-00030', (SELECT id FROM policies WHERE policy_number = 'POL-2024-003'),
+         (SELECT id FROM customers WHERE customer_code = 'CUST-0003'),
+         'OUTPATIENT', 'DISEASE', '2023-08-02', '2023-08-02', 'Gangnam Severance Hospital', 'GENERAL',
+         'M54.5', 'Low back pain', NULL, NULL, NULL, 0, 55000, 40000, 15000, 55000, 'REJECTED')
+        ON CONFLICT (claim_number) DO NOTHING;
+END $$;
+
+-- Ensure enterprise mock policy_coverages exist even if base seed is skipped.
+INSERT INTO policy_coverages (
+    id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+    deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+    annual_limit, used_annual_amount, surgery_classification
+)
+SELECT 20, (SELECT id FROM policies WHERE policy_number = 'POL-2024-004'),
+       (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+       'Inpatient Insured', 'DIS_HOSP_INS', 30000000, 'MAX', 100000, 10, 90, NULL, 30000000, 0, NULL
+WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 20);
+
+INSERT INTO policy_coverages (
+    id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+    deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+    annual_limit, used_annual_amount, surgery_classification
+)
+SELECT 21, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+       (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_INS'),
+       'Inpatient Insured', 'DIS_HOSP_INS', 50000000, 'MAX', 100000, 10, 90, NULL, 50000000, 0, NULL
+WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 21);
+
+INSERT INTO policy_coverages (
+    id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+    deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+    annual_limit, used_annual_amount, surgery_classification
+)
+SELECT 22, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+       (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_HOSP_UNINS'),
+       'Inpatient Uninsured', 'DIS_HOSP_UNINS', 50000000, 'MAX', 200000, 0, 80, NULL, 50000000, 0, NULL
+WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 22);
+
+INSERT INTO policy_coverages (
+    id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+    deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+    annual_limit, used_annual_amount, surgery_classification
+)
+SELECT 23, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+       (SELECT id FROM coverage_types WHERE code = 'FIXED_HOSP_DAILY'),
+       'Hospital Daily', 'DIS_HOSP_DAILY', 100000, 'FIXED', 0, 0, 100, 30, 7000000, 0, NULL
+WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 23);
+
+INSERT INTO policy_coverages (
+    id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+    deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+    annual_limit, used_annual_amount, surgery_classification
+)
+SELECT 24, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+       (SELECT id FROM coverage_types WHERE code = 'REAL_LOSS_OUT_INS'),
+       'Outpatient Insured', 'OUT_INS', 200000, 'FIXED', 10000, 0, 90, NULL, 2400000, 0, NULL
+WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 24);
+
+INSERT INTO policy_coverages (
+    id, policy_id, coverage_type_id, coverage_name, coverage_code, insured_amount,
+    deductible_type, deductible_amount, deductible_rate, payout_rate, max_days,
+    annual_limit, used_annual_amount, surgery_classification
+)
+SELECT 25, (SELECT id FROM policies WHERE policy_number = 'POL-2024-005'),
+       (SELECT id FROM coverage_types WHERE code = 'FIXED_SURGERY_4'),
+       'Surgery Class 4', 'DIS_SURG_4', 3000000, 'FIXED', 0, 0, 100, NULL, 30000000, 0, 4
+WHERE NOT EXISTS (SELECT 1 FROM policy_coverages WHERE id = 25);

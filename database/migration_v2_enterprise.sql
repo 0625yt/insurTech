@@ -745,6 +745,447 @@ INSERT INTO document_requirements (requirement_code, claim_type, is_hospitalizat
 ON CONFLICT (requirement_code) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 상세 Mock 데이터 - 청구 상세보기용
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 1. 청구 항목 상세 (claim_items) - 기존 청구 5건에 대한 항목별 산정 내역
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- CLM-2024-00001 (홍길동 - 급성 충수염 + 복강경 충수절제술)
+INSERT INTO claim_items (claim_id, policy_coverage_id, item_type, item_name, sequence_no, claimed_amount, calculation_base, base_amount_type, deductible_applied, payout_rate_applied, days_applied, reduction_rate, reduction_amount, limit_exceeded_amount, calculated_amount, approved_amount, rejected_amount, calculation_formula, calculation_detail) VALUES
+-- 입원 의료비 (급여)
+(1, 1, 'HOSP_MEDICAL', '입원의료비(급여)', 1, 1200000, 1200000, 'MEDICAL_EXPENSE', 100000, 90, 4, 0, 0, 0, 990000, 990000, 0,
+'(1,200,000원 - 100,000원) × 90% = 990,000원',
+'{"급여항목": 1200000, "본인부담금": 100000, "지급률": 90, "산정액": 990000}'::jsonb),
+
+-- 입원 의료비 (비급여)
+(1, 2, 'HOSP_MEDICAL', '입원의료비(비급여)', 2, 320000, 320000, 'MEDICAL_EXPENSE', 200000, 80, 4, 0, 0, 0, 96000, 96000, 0,
+'(320,000원 - 200,000원) × 80% = 96,000원',
+'{"비급여항목": 320000, "본인부담금": 200000, "지급률": 80, "산정액": 96000}'::jsonb),
+
+-- 입원 일당
+(1, 3, 'HOSP_DAILY', '질병입원일당', 3, 200000, 50000, 'DAILY_RATE', 0, 100, 4, 0, 0, 0, 200000, 200000, 0,
+'50,000원 × 4일 = 200,000원',
+'{"일당단가": 50000, "입원일수": 4, "산정액": 200000}'::jsonb),
+
+-- 수술비 (2종)
+(1, 5, 'SURGERY', '질병수술비(2종)', 4, 600000, 600000, 'FIXED_AMOUNT', 0, 100, NULL, 0, 0, 0, 600000, 600000, 0,
+'2종 수술비 = 600,000원',
+'{"수술등급": 2, "가입금액": 600000, "산정액": 600000}'::jsonb);
+
+-- CLM-2024-00002 (김철수 - 담석증 + 복강경 담낭절제술)
+INSERT INTO claim_items (claim_id, policy_coverage_id, item_type, item_name, sequence_no, claimed_amount, calculation_base, base_amount_type, deductible_applied, payout_rate_applied, days_applied, reduction_rate, reduction_amount, limit_exceeded_amount, calculated_amount, approved_amount, rejected_amount, calculation_formula, calculation_detail) VALUES
+-- 입원 의료비 (급여)
+(2, 9, 'HOSP_MEDICAL', '입원의료비(급여)', 1, 2800000, 2800000, 'MEDICAL_EXPENSE', 100000, 90, 3, 0, 0, 0, 2430000, 2430000, 0,
+'(2,800,000원 - 100,000원) × 90% = 2,430,000원',
+'{"급여항목": 2800000, "본인부담금": 100000, "지급률": 90, "산정액": 2430000}'::jsonb),
+
+-- 입원 의료비 (비급여)
+(2, 10, 'HOSP_MEDICAL', '입원의료비(비급여)', 2, 700000, 700000, 'MEDICAL_EXPENSE', 200000, 80, 3, 0, 0, 0, 400000, 400000, 0,
+'(700,000원 - 200,000원) × 80% = 400,000원',
+'{"비급여항목": 700000, "본인부담금": 200000, "지급률": 80, "산정액": 400000}'::jsonb),
+
+-- 입원 일당
+(2, 11, 'HOSP_DAILY', '질병입원일당', 3, 300000, 100000, 'DAILY_RATE', 0, 100, 3, 0, 0, 0, 300000, 300000, 0,
+'100,000원 × 3일 = 300,000원',
+'{"일당단가": 100000, "입원일수": 3, "산정액": 300000}'::jsonb),
+
+-- 수술비 (2종)
+(2, 13, 'SURGERY', '질병수술비(2종)', 4, 1000000, 1000000, 'FIXED_AMOUNT', 0, 100, NULL, 0, 0, 0, 1000000, 1000000, 0,
+'2종 수술비 = 1,000,000원',
+'{"수술등급": 2, "가입금액": 1000000, "산정액": 1000000}'::jsonb);
+
+-- CLM-2024-00003 (이영희 - 폐렴 통원 - 감액기간 적용)
+INSERT INTO claim_items (claim_id, policy_coverage_id, item_type, item_name, sequence_no, claimed_amount, calculation_base, base_amount_type, deductible_applied, payout_rate_applied, days_applied, reduction_rate, reduction_amount, limit_exceeded_amount, calculated_amount, approved_amount, rejected_amount, calculation_formula, calculation_detail) VALUES
+-- 통원 외래 (감액 50% 적용)
+(3, 18, 'OUTPATIENT', '통원의료비(급여)', 1, 70000, 70000, 'MEDICAL_EXPENSE', 10000, 90, 1, 50, 27000, 0, 54000, 27000, 27000,
+'[(70,000원 - 10,000원) × 90%] × 50% = 27,000원 (감액기간 적용)',
+'{"급여항목": 70000, "공제금액": 10000, "지급률": 90, "산정전액": 54000, "감액률": 50, "감액금액": 27000, "최종산정액": 27000, "거절사유": "감액기간 적용"}'::jsonb),
+
+-- 통원 비급여 (감액 50% 적용)
+(3, 19, 'OUTPATIENT', '통원의료비(비급여)', 2, 15000, 15000, 'MEDICAL_EXPENSE', 30000, 80, 1, 50, 0, 0, 0, 0, 15000,
+'15,000원 < 30,000원 공제금액 → 지급 불가',
+'{"비급여항목": 15000, "공제금액": 30000, "산정액": 0, "거절사유": "공제금액 미만"}'::jsonb);
+
+-- CLM-2024-00004 (박민수 - 요통 입원 - 사기 의심)
+INSERT INTO claim_items (claim_id, policy_coverage_id, item_type, item_name, sequence_no, claimed_amount, calculation_base, base_amount_type, deductible_applied, payout_rate_applied, days_applied, reduction_rate, reduction_amount, limit_exceeded_amount, calculated_amount, approved_amount, rejected_amount, rejection_code, rejection_reason, calculation_formula, calculation_detail) VALUES
+-- 입원 의료비 (심사 보류)
+(4, NULL, 'HOSP_MEDICAL', '입원의료비(급여)', 1, 1500000, 1500000, 'MEDICAL_EXPENSE', 100000, 90, 9, 0, 0, 0, 1260000, 0, 0,
+'PENDING_REVIEW', '사기 의심으로 인한 정밀 심사 필요',
+'(1,500,000원 - 100,000원) × 90% = 1,260,000원 (심사 보류중)',
+'{"급여항목": 1500000, "본인부담금": 100000, "지급률": 90, "산정액": 1260000, "상태": "심사보류", "사유": "요통 반복청구 패턴 감지"}'::jsonb),
+
+-- 입원 의료비 비급여 (심사 보류)
+(4, NULL, 'HOSP_MEDICAL', '입원의료비(비급여)', 2, 600000, 600000, 'MEDICAL_EXPENSE', 200000, 80, 9, 0, 0, 0, 320000, 0, 0,
+'PENDING_REVIEW', '사기 의심으로 인한 정밀 심사 필요',
+'(600,000원 - 200,000원) × 80% = 320,000원 (심사 보류중)',
+'{"비급여항목": 600000, "본인부담금": 200000, "지급률": 80, "산정액": 320000, "상태": "심사보류"}'::jsonb);
+
+-- CLM-2024-00005 (정수진 - 심근경색 + PCI 수술)
+INSERT INTO claim_items (claim_id, policy_coverage_id, item_type, item_name, sequence_no, claimed_amount, calculation_base, base_amount_type, deductible_applied, payout_rate_applied, days_applied, reduction_rate, reduction_amount, limit_exceeded_amount, calculated_amount, approved_amount, rejected_amount, calculation_formula, calculation_detail) VALUES
+-- 입원 의료비 (급여) - 고액
+(5, 21, 'HOSP_MEDICAL', '입원의료비(급여)', 1, 10000000, 10000000, 'MEDICAL_EXPENSE', 100000, 90, 7, 0, 0, 0, 8910000, 8910000, 0,
+'(10,000,000원 - 100,000원) × 90% = 8,910,000원',
+'{"급여항목": 10000000, "본인부담금": 100000, "지급률": 90, "산정액": 8910000, "고액청구": true}'::jsonb),
+
+-- 입원 의료비 (비급여)
+(5, 22, 'HOSP_MEDICAL', '입원의료비(비급여)', 2, 2000000, 2000000, 'MEDICAL_EXPENSE', 200000, 80, 7, 0, 0, 0, 1440000, 1440000, 0,
+'(2,000,000원 - 200,000원) × 80% = 1,440,000원',
+'{"비급여항목": 2000000, "본인부담금": 200000, "지급률": 80, "산정액": 1440000}'::jsonb),
+
+-- 입원 일당
+(5, 23, 'HOSP_DAILY', '질병입원일당', 3, 700000, 100000, 'DAILY_RATE', 0, 100, 7, 0, 0, 0, 700000, 700000, 0,
+'100,000원 × 7일 = 700,000원',
+'{"일당단가": 100000, "입원일수": 7, "산정액": 700000}'::jsonb),
+
+-- 수술비 (4종 - PCI)
+(5, 25, 'SURGERY', '질병수술비(4종)', 4, 3000000, 3000000, 'FIXED_AMOUNT', 0, 100, NULL, 0, 0, 0, 3000000, 3000000, 0,
+'4종 수술비(경피적 관상동맥중재술) = 3,000,000원',
+'{"수술등급": 4, "가입금액": 3000000, "산정액": 3000000, "수술명": "PCI"}'::jsonb);
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 2. 청구 서류 (claim_documents)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- CLM-2024-00001 서류
+INSERT INTO claim_documents (claim_id, document_type, document_name, file_path, file_size, mime_type, ocr_status, ocr_result, ocr_confidence, ocr_model_used, ocr_processed_at, is_verified, verified_by, verified_at) VALUES
+(1, 'RECEIPT', '진료비영수증_20241214.pdf', '/uploads/claims/CLM-2024-00001/receipt.pdf', 245678, 'application/pdf', 'COMPLETED',
+'{"병원명": "서울대학교병원", "환자명": "홍길동", "진료기간": "2024-12-10 ~ 2024-12-14", "총진료비": 1520000, "급여": 1200000, "비급여": 320000, "본인부담금": 152000}'::jsonb,
+0.95, 'claude-3.5-sonnet', '2024-12-15 09:32:15', TRUE, 'system', '2024-12-15 09:35:20'),
+
+(1, 'DIAGNOSIS', '진단서_급성충수염.pdf', '/uploads/claims/CLM-2024-00001/diagnosis.pdf', 198234, 'application/pdf', 'COMPLETED',
+'{"병명": "급성 충수염, 범발성 복막염 동반", "진단코드": "K35.0", "진단일": "2024-12-10", "의사소견": "응급수술 필요", "발병일": "2024-12-10"}'::jsonb,
+0.92, 'gpt-4o', '2024-12-15 09:33:22', TRUE, 'system', '2024-12-15 09:35:20'),
+
+(1, 'SURGERY', '수술확인서_복강경충수절제술.pdf', '/uploads/claims/CLM-2024-00001/surgery.pdf', 176543, 'application/pdf', 'COMPLETED',
+'{"수술명": "복강경 충수절제술", "수술코드": "S0401", "수술일": "2024-12-10", "집도의": "김외과", "수술시간": "2시간 30분", "마취방법": "전신마취"}'::jsonb,
+0.88, 'gemini-1.5-pro', '2024-12-15 09:34:10', TRUE, 'system', '2024-12-15 09:35:20'),
+
+(1, 'ADMISSION', '입퇴원확인서.pdf', '/uploads/claims/CLM-2024-00001/admission.pdf', 123456, 'application/pdf', 'COMPLETED',
+'{"입원일": "2024-12-10", "퇴원일": "2024-12-14", "입원일수": 4, "입원경로": "응급실"}'::jsonb,
+0.94, 'claude-3.5-sonnet', '2024-12-15 09:34:45', TRUE, 'system', '2024-12-15 09:35:20');
+
+-- CLM-2024-00002 서류
+INSERT INTO claim_documents (claim_id, document_type, document_name, file_path, file_size, mime_type, ocr_status, ocr_result, ocr_confidence, ocr_model_used, ocr_processed_at, is_verified, verified_by, verified_at) VALUES
+(2, 'RECEIPT', '진료비영수증_20241215.pdf', '/uploads/claims/CLM-2024-00002/receipt.pdf', 267890, 'application/pdf', 'COMPLETED',
+'{"병원명": "삼성서울병원", "환자명": "김철수", "진료기간": "2024-12-12 ~ 2024-12-15", "총진료비": 3500000, "급여": 2800000, "비급여": 700000, "본인부담금": 350000}'::jsonb,
+0.96, 'gpt-4o', '2024-12-16 10:15:30', TRUE, 'system', '2024-12-16 10:20:15'),
+
+(2, 'DIAGNOSIS', '진단서_담석증.pdf', '/uploads/claims/CLM-2024-00002/diagnosis.pdf', 189456, 'application/pdf', 'COMPLETED',
+'{"병명": "담석증, 급성 담낭염 동반", "진단코드": "K80.0", "진단일": "2024-12-12", "의사소견": "복강경 수술 시행", "발병일": "2024-12-11"}'::jsonb,
+0.93, 'claude-3.5-sonnet', '2024-12-16 10:16:45', TRUE, 'system', '2024-12-16 10:20:15'),
+
+(2, 'SURGERY', '수술확인서_복강경담낭절제술.pdf', '/uploads/claims/CLM-2024-00002/surgery.pdf', 198765, 'application/pdf', 'COMPLETED',
+'{"수술명": "복강경 담낭절제술", "수술코드": "S0501", "수술일": "2024-12-12", "집도의": "박외과", "수술시간": "1시간 45분", "마취방법": "전신마취"}'::jsonb,
+0.91, 'gemini-1.5-pro', '2024-12-16 10:17:20', TRUE, 'system', '2024-12-16 10:20:15');
+
+-- CLM-2024-00003 서류 (통원)
+INSERT INTO claim_documents (claim_id, document_type, document_name, file_path, file_size, mime_type, ocr_status, ocr_result, ocr_confidence, ocr_model_used, ocr_processed_at, is_verified, verified_by, verified_at) VALUES
+(3, 'RECEIPT', '외래진료비영수증.pdf', '/uploads/claims/CLM-2024-00003/receipt.pdf', 123789, 'application/pdf', 'COMPLETED',
+'{"병원명": "강남세브란스병원", "환자명": "이영희", "진료일": "2024-12-15", "총진료비": 85000, "급여": 70000, "비급여": 15000, "본인부담금": 35000}'::jsonb,
+0.89, 'gpt-4o', '2024-12-15 14:22:10', TRUE, 'system', '2024-12-15 14:25:30'),
+
+(3, 'DIAGNOSIS', '진단서_폐렴.pdf', '/uploads/claims/CLM-2024-00003/diagnosis.pdf', 145678, 'application/pdf', 'COMPLETED',
+'{"병명": "폐렴, 상세불명", "진단코드": "J18.9", "진단일": "2024-12-15", "의사소견": "외래 치료 가능", "발병일": "2024-12-14"}'::jsonb,
+0.87, 'claude-3.5-sonnet', '2024-12-15 14:23:35', TRUE, 'system', '2024-12-15 14:25:30');
+
+-- CLM-2024-00004 서류 (사기 의심)
+INSERT INTO claim_documents (claim_id, document_type, document_name, file_path, file_size, mime_type, ocr_status, ocr_result, ocr_confidence, ocr_model_used, ocr_processed_at, is_verified, verified_by, verified_at) VALUES
+(4, 'RECEIPT', '진료비영수증_20241210.pdf', '/uploads/claims/CLM-2024-00004/receipt.pdf', 234567, 'application/pdf', 'COMPLETED',
+'{"병원명": "분당서울대병원", "환자명": "박민수", "진료기간": "2024-12-01 ~ 2024-12-10", "총진료비": 2100000, "급여": 1500000, "비급여": 600000, "본인부담금": 330000}'::jsonb,
+0.82, 'gemini-1.5-pro', '2024-12-11 15:10:20', FALSE, NULL, NULL),
+
+(4, 'DIAGNOSIS', '진단서_요통.pdf', '/uploads/claims/CLM-2024-00004/diagnosis.pdf', 167890, 'application/pdf', 'COMPLETED',
+'{"병명": "요통", "진단코드": "M54.5", "진단일": "2024-12-01", "의사소견": "보존적 치료 시행", "발병일": "2024-11-28"}'::jsonb,
+0.78, 'gpt-4o', '2024-12-11 15:11:45', FALSE, NULL, NULL),
+
+(4, 'ADMISSION', '입퇴원확인서.pdf', '/uploads/claims/CLM-2024-00004/admission.pdf', 134567, 'application/pdf', 'COMPLETED',
+'{"입원일": "2024-12-01", "퇴원일": "2024-12-10", "입원일수": 9, "입원경로": "외래", "특이사항": "주말 포함 입원"}'::jsonb,
+0.85, 'claude-3.5-sonnet', '2024-12-11 15:12:30', FALSE, NULL, NULL);
+
+-- CLM-2024-00005 서류 (심근경색 - 중대질병)
+INSERT INTO claim_documents (claim_id, document_type, document_name, file_path, file_size, mime_type, ocr_status, ocr_result, ocr_confidence, ocr_model_used, ocr_processed_at, is_verified, verified_by, verified_at) VALUES
+(5, 'RECEIPT', '진료비영수증_심근경색.pdf', '/uploads/claims/CLM-2024-00005/receipt.pdf', 345678, 'application/pdf', 'COMPLETED',
+'{"병원명": "서울아산병원", "환자명": "정수진", "진료기간": "2024-12-08 ~ 2024-12-15", "총진료비": 12000000, "급여": 10000000, "비급여": 2000000, "본인부담금": 1400000}'::jsonb,
+0.97, 'claude-3.5-sonnet', '2024-12-16 08:45:20', TRUE, 'system', '2024-12-16 08:50:30'),
+
+(5, 'DIAGNOSIS', '진단서_급성심근경색.pdf', '/uploads/claims/CLM-2024-00005/diagnosis.pdf', 223456, 'application/pdf', 'COMPLETED',
+'{"병명": "급성 심근경색증, 상세불명", "진단코드": "I21.9", "진단일": "2024-12-08", "의사소견": "응급 PCI 시행", "발병일": "2024-12-08", "중대질병": true}'::jsonb,
+0.95, 'gpt-4o', '2024-12-16 08:46:50', TRUE, 'system', '2024-12-16 08:50:30'),
+
+(5, 'SURGERY', '수술확인서_PCI.pdf', '/uploads/claims/CLM-2024-00005/surgery.pdf', 267890, 'application/pdf', 'COMPLETED',
+'{"수술명": "경피적 관상동맥중재술", "수술코드": "S0802", "수술일": "2024-12-08", "집도의": "이심장", "수술시간": "3시간 20분", "마취방법": "국소마취", "스텐트개수": 2}'::jsonb,
+0.93, 'gemini-1.5-pro', '2024-12-16 08:48:15', TRUE, 'system', '2024-12-16 08:50:30'),
+
+(5, 'ADMISSION', '입퇴원확인서.pdf', '/uploads/claims/CLM-2024-00005/admission.pdf', 156789, 'application/pdf', 'COMPLETED',
+'{"입원일": "2024-12-08", "퇴원일": "2024-12-15", "입원일수": 7, "입원경로": "응급실", "중환자실": "2일"}'::jsonb,
+0.94, 'claude-3.5-sonnet', '2024-12-16 08:49:20', TRUE, 'system', '2024-12-16 08:50:30');
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 3. 청구 심사 이력 (claim_reviews)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- CLM-2024-00001 심사 이력
+INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_id, reviewer_name, action, previous_status, new_status, decision, decision_reason, confidence_score, ai_analysis, processing_time_ms, created_at) VALUES
+(1, 'AI', NULL, 'AI-Engine', 'OCR_PROCESS', 'RECEIVED', 'OCR_PROCESSING', NULL, 'OCR 처리 시작', NULL, NULL, 1200, '2024-12-15 09:30:00'),
+(1, 'AI', NULL, 'AI-Engine', 'OCR_COMPLETE', 'OCR_PROCESSING', 'OCR_COMPLETED', NULL, 'OCR 처리 완료 (4개 문서)', 0.92, '{"documents_processed": 4, "total_confidence": 0.92, "errors": 0}'::jsonb, 8500, '2024-12-15 09:35:20'),
+(1, 'AI', NULL, 'AI-Engine', 'AUTO_REVIEW', 'OCR_COMPLETED', 'AI_REVIEW', 'AUTO_APPROVE', '정상 청구 - 자동승인 추천', 0.88,
+'{"보장확인": "적합", "면책기간": "통과", "진단코드": "유효", "청구금액": "적정", "사기위험": "낮음 (0.10)", "추천": "자동승인"}'::jsonb,
+3400, '2024-12-15 09:36:00'),
+(1, 'HUMAN', 101, '심사역_김민지', 'FINAL_APPROVE', 'AI_REVIEW', 'APPROVED', 'APPROVED', 'AI 추천 확인 후 최종 승인', NULL,
+'{"검토사항": "AI 분석 타당함", "추가확인": "없음", "승인금액": 1886000}'::jsonb,
+NULL, '2024-12-15 10:15:30');
+
+-- CLM-2024-00002 심사 이력
+INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_id, reviewer_name, action, previous_status, new_status, decision, decision_reason, confidence_score, ai_analysis, processing_time_ms, created_at) VALUES
+(2, 'AI', NULL, 'AI-Engine', 'OCR_PROCESS', 'RECEIVED', 'OCR_PROCESSING', NULL, 'OCR 처리 시작', NULL, NULL, 1500, '2024-12-16 10:10:00'),
+(2, 'AI', NULL, 'AI-Engine', 'OCR_COMPLETE', 'OCR_PROCESSING', 'OCR_COMPLETED', NULL, 'OCR 처리 완료 (3개 문서)', 0.93, '{"documents_processed": 3, "total_confidence": 0.93, "errors": 0}'::jsonb, 7200, '2024-12-16 10:20:15'),
+(2, 'AI', NULL, 'AI-Engine', 'AUTO_REVIEW', 'OCR_COMPLETED', 'AI_REVIEW', 'AUTO_APPROVE', '정상 청구 - 자동승인 추천', 0.91,
+'{"보장확인": "적합", "면책기간": "통과", "진단코드": "유효", "청구금액": "적정", "사기위험": "낮음 (0.08)", "추천": "자동승인"}'::jsonb,
+2900, '2024-12-16 10:21:30'),
+(2, 'HUMAN', 102, '심사역_이정훈', 'FINAL_APPROVE', 'AI_REVIEW', 'APPROVED', 'APPROVED', 'AI 추천 확인 후 최종 승인', NULL,
+'{"검토사항": "수술 적정성 확인 완료", "추가확인": "없음", "승인금액": 4130000}'::jsonb,
+NULL, '2024-12-16 11:05:20');
+
+-- CLM-2024-00003 심사 이력 (감액)
+INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_id, reviewer_name, action, previous_status, new_status, decision, decision_reason, confidence_score, ai_analysis, processing_time_ms, created_at) VALUES
+(3, 'AI', NULL, 'AI-Engine', 'OCR_PROCESS', 'RECEIVED', 'OCR_PROCESSING', NULL, 'OCR 처리 시작', NULL, NULL, 1100, '2024-12-15 14:20:00'),
+(3, 'AI', NULL, 'AI-Engine', 'OCR_COMPLETE', 'OCR_PROCESSING', 'OCR_COMPLETED', NULL, 'OCR 처리 완료 (2개 문서)', 0.88, '{"documents_processed": 2, "total_confidence": 0.88, "errors": 0}'::jsonb, 5800, '2024-12-15 14:25:30'),
+(3, 'AI', NULL, 'AI-Engine', 'AUTO_REVIEW', 'OCR_COMPLETED', 'AI_REVIEW', 'MANUAL_REVIEW', '감액기간 적용 - 수동 검토 필요', 0.85,
+'{"보장확인": "적합", "면책기간": "통과", "감액기간": "적용대상", "감액률": 50, "진단코드": "유효", "사기위험": "낮음 (0.15)", "추천": "수동검토"}'::jsonb,
+2100, '2024-12-15 14:26:45'),
+(3, 'HUMAN', 101, '심사역_김민지', 'REDUCTION_APPLY', 'AI_REVIEW', 'APPROVED', 'PARTIALLY_APPROVED', '감액기간 적용하여 50% 지급', NULL,
+'{"감액기간": "2024-01-10 ~ 2025-01-10", "감액률": 50, "원산정액": 54000, "감액후지급액": 27000}'::jsonb,
+NULL, '2024-12-15 15:10:00');
+
+-- CLM-2024-00004 심사 이력 (사기 의심)
+INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_id, reviewer_name, action, previous_status, new_status, decision, decision_reason, confidence_score, ai_analysis, processing_time_ms, created_at) VALUES
+(4, 'AI', NULL, 'AI-Engine', 'OCR_PROCESS', 'RECEIVED', 'OCR_PROCESSING', NULL, 'OCR 처리 시작', NULL, NULL, 1400, '2024-12-11 15:05:00'),
+(4, 'AI', NULL, 'AI-Engine', 'OCR_COMPLETE', 'OCR_PROCESSING', 'OCR_COMPLETED', NULL, 'OCR 처리 완료 (3개 문서)', 0.82, '{"documents_processed": 3, "total_confidence": 0.82, "errors": 0, "warnings": ["저신뢰도 문서 존재"]}'::jsonb, 9200, '2024-12-11 15:12:30'),
+(4, 'AI', NULL, 'AI-Engine', 'FRAUD_DETECT', 'OCR_COMPLETED', 'FRAUD_CHECK', 'INVESTIGATE', '사기 패턴 감지 - 정밀 조사 필요', 0.75,
+'{"사기위험점수": 0.68, "감지패턴": ["요통반복청구", "주말입원패턴", "단기다수청구"], "위험등급": "HIGH", "추천": "정밀조사"}'::jsonb,
+4500, '2024-12-11 15:14:00'),
+(4, 'HUMAN', 103, '심사역_박수진', 'ASSIGN_INVESTIGATOR', 'FRAUD_CHECK', 'PENDING_REVIEW', NULL, '사기조사팀 배정', NULL,
+'{"조사팀": "FDS-Team", "조사담당": "강철민", "조사시작일": "2024-12-12"}'::jsonb,
+NULL, '2024-12-11 16:20:00');
+
+-- CLM-2024-00005 심사 이력 (진행중)
+INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_id, reviewer_name, action, previous_status, new_status, decision, decision_reason, confidence_score, ai_analysis, processing_time_ms, created_at) VALUES
+(5, 'AI', NULL, 'AI-Engine', 'OCR_PROCESS', 'RECEIVED', 'OCR_PROCESSING', NULL, 'OCR 처리 시작', NULL, NULL, 1600, '2024-12-16 08:40:00'),
+(5, 'AI', NULL, 'AI-Engine', 'OCR_COMPLETE', 'OCR_PROCESSING', 'OCR_COMPLETED', NULL, 'OCR 처리 완료 (4개 문서)', 0.95, '{"documents_processed": 4, "total_confidence": 0.95, "errors": 0}'::jsonb, 10200, '2024-12-16 08:50:30'),
+(5, 'AI', NULL, 'AI-Engine', 'AUTO_REVIEW', 'OCR_COMPLETED', 'AI_PROCESSING', 'MANUAL_REVIEW', '중대질병 고액청구 - 수동 검토 필요', 0.89,
+'{"보장확인": "적합", "면책기간": "통과", "진단코드": "유효", "중대질병": true, "청구금액": "고액 (12,000,000원)", "사기위험": "낮음 (0.05)", "추천": "수동검토-고액청구"}'::jsonb,
+5200, '2024-12-16 08:52:00');
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 4. 사기 탐지 결과 (fraud_detection_results)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- CLM-2024-00001 (정상)
+INSERT INTO fraud_detection_results (claim_id, total_score, risk_level, detected_patterns, recommended_action, action_taken, action_by, action_at, investigation_required, created_at) VALUES
+(1, 0.10, 'LOW',
+'[{"pattern_code": "NORMAL", "pattern_name": "정상 청구", "score": 0.10, "details": "이상 패턴 없음"}]'::jsonb,
+'APPROVE', 'APPROVED', '심사역_김민지', '2024-12-15 10:15:30', FALSE, '2024-12-15 09:36:00');
+
+-- CLM-2024-00002 (정상)
+INSERT INTO fraud_detection_results (claim_id, total_score, risk_level, detected_patterns, recommended_action, action_taken, action_by, action_at, investigation_required, created_at) VALUES
+(2, 0.08, 'LOW',
+'[{"pattern_code": "NORMAL", "pattern_name": "정상 청구", "score": 0.08, "details": "이상 패턴 없음"}]'::jsonb,
+'APPROVE', 'APPROVED', '심사역_이정훈', '2024-12-16 11:05:20', FALSE, '2024-12-16 10:21:30');
+
+-- CLM-2024-00003 (경미)
+INSERT INTO fraud_detection_results (claim_id, total_score, risk_level, detected_patterns, recommended_action, action_taken, action_by, action_at, investigation_required, created_at) VALUES
+(3, 0.15, 'LOW',
+'[{"pattern_code": "FRD005", "pattern_name": "조기청구", "score": 0.15, "details": "계약 후 11개월 내 청구", "weight": 0.25}]'::jsonb,
+'REVIEW', 'APPROVED', '심사역_김민지', '2024-12-15 15:10:00', FALSE, '2024-12-15 14:26:45');
+
+-- CLM-2024-00004 (고위험)
+INSERT INTO fraud_detection_results (claim_id, total_score, risk_level, detected_patterns, recommended_action, action_taken, action_by, action_at, action_notes, investigation_required, investigation_id, created_at) VALUES
+(4, 0.68, 'HIGH',
+'[
+  {"pattern_code": "FRD002", "pattern_name": "요통반복청구", "score": 0.40, "details": "최근 6개월간 요통 진단 4회 청구", "weight": 0.40},
+  {"pattern_code": "FRD003", "pattern_name": "주말입원패턴", "score": 0.25, "details": "금요일 입원, 월요일 퇴원 패턴 2회 반복", "weight": 0.25},
+  {"pattern_code": "FRD001", "pattern_name": "단기다수청구", "score": 0.20, "details": "최근 30일 내 3건 청구", "weight": 0.30}
+]'::jsonb,
+'INVESTIGATE', 'UNDER_INVESTIGATION', '심사역_박수진', '2024-12-11 16:20:00',
+'사기조사팀 배정 완료. 과거 청구이력 및 병원 방문 패턴 정밀 분석 중',
+TRUE, 'INV-2024-0012', '2024-12-11 15:14:00');
+
+-- CLM-2024-00005 (정상 - 중대질병)
+INSERT INTO fraud_detection_results (claim_id, total_score, risk_level, detected_patterns, recommended_action, created_at) VALUES
+(5, 0.05, 'LOW',
+'[{"pattern_code": "FRD004", "pattern_name": "고액단건청구", "score": 0.05, "details": "1회 청구 12,000,000원 (중대질병으로 정상)", "weight": 0.20}]'::jsonb,
+'REVIEW', '2024-12-16 08:52:00');
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 5. 청구 상태 및 금액 업데이트
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- CLM-2024-00001 업데이트
+UPDATE claims SET
+    status = 'APPROVED',
+    ai_confidence_score = 0.88,
+    ai_recommendation = 'AUTO_APPROVE',
+    ai_analysis_result = '{"보장확인":"적합","면책기간":"통과","진단코드":"유효","청구금액":"적정","사기위험":"낮음","coverage_analysis":{"breakdown":[{"item":"입원의료비(급여)","approvedAmount":990000,"calculation":"(1,200,000-100,000)*90%","termReference":{"article":"제15조-1","title":"입원의료비(급여)","content":"급여 입원의료비는 본인부담금 공제 후 90% 지급.","formula":"(급여-본인부담금)×90%"}},{"item":"입원의료비(비급여)","approvedAmount":96000,"calculation":"(320,000-200,000)*80%","termReference":{"article":"제15조-2","title":"입원의료비(비급여)","content":"비급여 입원의료비는 공제 후 80% 지급.","formula":"(비급여-본인부담금)×80%"}},{"item":"질병입원일당","approvedAmount":200000,"calculation":"50,000×4일","termReference":{"article":"제16조-1","title":"입원일당","content":"입원 1일당 정액 지급.","formula":"일당×일수"}},{"item":"질병수술비(2종)","approvedAmount":600000,"calculation":"2종 수술비 정액","termReference":{"article":"제17조-1","title":"수술비","content":"수술 등급별 정액 지급.","formula":"등급별 정액"}}],"total_approved":1886000,"total_rejected":0}}'::jsonb,
+    fraud_score = 0.10,
+    fraud_flags = '["정상"]'::jsonb,
+    fraud_check_passed = TRUE,
+    auto_processable = TRUE,
+    assigned_reviewer_id = 101,
+    assigned_reviewer_name = '심사역_김민지',
+    review_priority = 3,
+    review_started_at = '2024-12-15 09:36:00',
+    review_completed_at = '2024-12-15 10:15:30',
+    decision = 'APPROVED',
+    decision_reason = 'AI 추천 확인 후 최종 승인',
+    approved_by = '심사역_김민지',
+    approved_at = '2024-12-15 10:15:30',
+    total_approved_amount = 1886000,
+    total_rejected_amount = 0,
+    net_payout_amount = 1886000,
+    payment_status = 'COMPLETED',
+    payment_date = '2024-12-16',
+    ocr_processed = TRUE,
+    ocr_confidence = 0.92,
+    ocr_models_used = ARRAY['claude-3.5-sonnet', 'gpt-4o', 'gemini-1.5-pro']
+WHERE claim_number = 'CLM-2024-00001';
+
+-- CLM-2024-00002 업데이트
+UPDATE claims SET
+    status = 'APPROVED',
+    ai_confidence_score = 0.91,
+    ai_recommendation = 'AUTO_APPROVE',
+    ai_analysis_result = '{"보장확인":"적합","면책기간":"통과","진단코드":"유효","청구금액":"적정","사기위험":"낮음","coverage_analysis":{"breakdown":[{"item":"입원의료비(급여)","approvedAmount":2430000,"calculation":"(2,800,000-100,000)*90%","termReference":{"article":"제15조-1","title":"입원의료비(급여)","content":"급여 입원의료비는 본인부담금 공제 후 90% 지급.","formula":"(급여-본인부담금)×90%"}},{"item":"입원의료비(비급여)","approvedAmount":400000,"calculation":"(700,000-200,000)*80%","termReference":{"article":"제15조-2","title":"입원의료비(비급여)","content":"비급여 입원의료비는 공제 후 80% 지급.","formula":"(비급여-본인부담금)×80%"}},{"item":"질병입원일당","approvedAmount":300000,"calculation":"100,000×3일","termReference":{"article":"제16조-1","title":"입원일당","content":"입원 1일당 정액 지급.","formula":"일당×일수"}},{"item":"질병수술비(2종)","approvedAmount":1000000,"calculation":"2종 수술비 정액","termReference":{"article":"제17조-1","title":"수술비","content":"수술 등급별 정액 지급.","formula":"등급별 정액"}}],"total_approved":4130000,"total_rejected":0}}'::jsonb,
+    fraud_score = 0.08,
+    fraud_flags = '["정상"]'::jsonb,
+    fraud_check_passed = TRUE,
+    auto_processable = TRUE,
+    assigned_reviewer_id = 102,
+    assigned_reviewer_name = '심사역_이정훈',
+    review_priority = 3,
+    review_started_at = '2024-12-16 10:21:30',
+    review_completed_at = '2024-12-16 11:05:20',
+    decision = 'APPROVED',
+    decision_reason = 'AI 추천 확인 후 최종 승인',
+    approved_by = '심사역_이정훈',
+    approved_at = '2024-12-16 11:05:20',
+    total_approved_amount = 4130000,
+    total_rejected_amount = 0,
+    net_payout_amount = 4130000,
+    payment_status = 'COMPLETED',
+    payment_date = '2024-12-17',
+    ocr_processed = TRUE,
+    ocr_confidence = 0.93,
+    ocr_models_used = ARRAY['gpt-4o', 'claude-3.5-sonnet', 'gemini-1.5-pro']
+WHERE claim_number = 'CLM-2024-00002';
+
+-- CLM-2024-00003 업데이트 (감액 적용)
+UPDATE claims SET
+    status = 'APPROVED',
+    ai_confidence_score = 0.85,
+    ai_recommendation = 'MANUAL_REVIEW',
+    ai_analysis_result = '{"보장확인":"적합","면책기간":"통과","감액기간":"적용대상","진단코드":"유효","coverage_analysis":{"breakdown":[{"item":"통원의료비(급여)","approvedAmount":27000,"calculation":"(70,000-10,000)*90%*50%","termReference":{"article":"제18조-1","title":"통원의료비(급여)","content":"통원 급여 항목 공제 후 지급.","formula":"(급여-공제)×90%"}},{"item":"통원의료비(비급여)","approvedAmount":0,"calculation":"공제금액 미만","termReference":{"article":"제18조-2","title":"통원의료비(비급여)","content":"통원 비급여 항목 공제 후 지급.","formula":"(비급여-공제)×80%"}}],"total_approved":27000,"total_rejected":42000}}'::jsonb,
+    fraud_score = 0.15,
+    fraud_flags = '["조기청구"]'::jsonb,
+    fraud_check_passed = TRUE,
+    auto_processable = FALSE,
+    assigned_reviewer_id = 101,
+    assigned_reviewer_name = '심사역_김민지',
+    review_priority = 5,
+    review_started_at = '2024-12-15 14:26:45',
+    review_completed_at = '2024-12-15 15:10:00',
+    decision = 'PARTIALLY_APPROVED',
+    decision_reason = '감액기간 적용하여 50% 지급',
+    approved_by = '심사역_김민지',
+    approved_at = '2024-12-15 15:10:00',
+    total_approved_amount = 27000,
+    total_rejected_amount = 42000,
+    net_payout_amount = 27000,
+    payment_status = 'COMPLETED',
+    payment_date = '2024-12-16',
+    ocr_processed = TRUE,
+    ocr_confidence = 0.88,
+    ocr_models_used = ARRAY['gpt-4o', 'claude-3.5-sonnet']
+WHERE claim_number = 'CLM-2024-00003';
+
+-- CLM-2024-00004 업데이트 (사기 의심 - 조사중)
+UPDATE claims SET
+    status = 'PENDING_REVIEW',
+    ai_confidence_score = 0.75,
+    ai_recommendation = 'INVESTIGATE',
+    ai_analysis_result = '{"사기위험점수":0.68,"감지패턴":["요통반복청구","주말입원패턴","단기다수청구"],"위험등급":"HIGH","coverage_analysis":{"breakdown":[{"item":"입원의료비(급여)","approvedAmount":0,"calculation":"심사 보류","termReference":{"article":"제15조-1","title":"입원의료비(급여)","content":"급여 입원의료비는 본인부담금 공제 후 90% 지급.","formula":"(급여-본인부담금)×90%"}},{"item":"입원의료비(비급여)","approvedAmount":0,"calculation":"심사 보류","termReference":{"article":"제15조-2","title":"입원의료비(비급여)","content":"비급여 입원의료비는 공제 후 80% 지급.","formula":"(비급여-본인부담금)×80%"}}],"total_approved":0,"total_rejected":0}}'::jsonb,
+    fraud_score = 0.68,
+    fraud_flags = '["요통반복청구", "주말입원패턴", "단기다수청구"]'::jsonb,
+    fraud_check_passed = FALSE,
+    auto_processable = FALSE,
+    assigned_reviewer_id = 103,
+    assigned_reviewer_name = '심사역_박수진',
+    review_priority = 1,
+    review_started_at = '2024-12-11 15:14:00',
+    total_approved_amount = 0,
+    total_rejected_amount = 0,
+    net_payout_amount = 0,
+    payment_status = 'PENDING',
+    ocr_processed = TRUE,
+    ocr_confidence = 0.82,
+    ocr_models_used = ARRAY['gemini-1.5-pro', 'gpt-4o', 'claude-3.5-sonnet']
+WHERE claim_number = 'CLM-2024-00004';
+
+-- CLM-2024-00005 업데이트 (AI 처리중)
+UPDATE claims SET
+    status = 'AI_PROCESSING',
+    ai_confidence_score = 0.89,
+    ai_recommendation = 'MANUAL_REVIEW',
+    ai_analysis_result = '{"보장확인":"적합","면책기간":"통과","중대질병":true,"청구금액":"고액","추천":"수동검토-고액청구","coverage_analysis":{"breakdown":[{"item":"입원의료비(급여)","approvedAmount":8910000,"calculation":"(10,000,000-100,000)*90%","termReference":{"article":"제15조-1","title":"입원의료비(급여)","content":"급여 입원의료비는 본인부담금 공제 후 90% 지급.","formula":"(급여-본인부담금)×90%"}},{"item":"입원의료비(비급여)","approvedAmount":1440000,"calculation":"(2,000,000-200,000)*80%","termReference":{"article":"제15조-2","title":"입원의료비(비급여)","content":"비급여 입원의료비는 공제 후 80% 지급.","formula":"(비급여-본인부담금)×80%"}},{"item":"질병입원일당","approvedAmount":700000,"calculation":"100,000×7일","termReference":{"article":"제16조-1","title":"입원일당","content":"입원 1일당 정액 지급.","formula":"일당×일수"}},{"item":"질병수술비(4종)","approvedAmount":3000000,"calculation":"4종 수술비 정액","termReference":{"article":"제17조-1","title":"수술비","content":"수술 등급별 정액 지급.","formula":"등급별 정액"}}],"total_approved":14050000,"total_rejected":0}}'::jsonb,
+    fraud_score = 0.05,
+    fraud_flags = '["고액청구-정상"]'::jsonb,
+    fraud_check_passed = TRUE,
+    auto_processable = FALSE,
+    review_priority = 2,
+    review_started_at = '2024-12-16 08:52:00',
+    total_approved_amount = 0,
+    total_rejected_amount = 0,
+    net_payout_amount = 0,
+    payment_status = 'PENDING',
+    ocr_processed = TRUE,
+    ocr_confidence = 0.95,
+    ocr_models_used = ARRAY['claude-3.5-sonnet', 'gpt-4o', 'gemini-1.5-pro']
+WHERE claim_number = 'CLM-2024-00005';
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 6. 추가 청구 데이터 (더 다양한 케이스)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- 추가 청구 6: 백내장 수술 (1종 수술)
+INSERT INTO claims (claim_number, policy_id, customer_id, claim_type, claim_subtype, treatment_start_date, treatment_end_date, hospital_name, hospital_type, diagnosis_code, diagnosis_name, surgery_code, surgery_name, surgery_classification, hospitalization_days, total_medical_expense, insured_expense, uninsured_expense, total_claimed_amount, status) VALUES
+('CLM-2024-00006', 6, 6, 'SURGERY', 'DISEASE', '2024-12-18', '2024-12-18', '서울대학교병원', 'GENERAL', 'H25.1', '노년백내장', 'S1101', '백내장수술(수정체유화술)', 1, 0, 1500000, 1200000, 300000, 1500000, 'RECEIVED');
+
+-- 추가 청구 7: 골절 (상해)
+INSERT INTO claims (claim_number, policy_id, customer_id, claim_type, claim_subtype, treatment_start_date, treatment_end_date, hospital_name, hospital_type, diagnosis_code, diagnosis_name, surgery_code, surgery_name, surgery_classification, hospitalization_days, total_medical_expense, insured_expense, uninsured_expense, total_claimed_amount, status) VALUES
+('CLM-2024-00007', 7, 7, 'HOSPITALIZATION', 'ACCIDENT', '2024-12-14', '2024-12-20', '강남세브란스병원', 'GENERAL', 'S82.0', '무릎뼈의 골절', 'S0902', '인공관절치환술(슬관절)', 4, 6, 8500000, 7000000, 1500000, 8500000, 'RECEIVED');
+
+-- 워크플로우 로그 추가
+INSERT INTO workflow_logs (claim_id, workflow_id, execution_id, node_name, node_type, status, input_data, output_data, execution_time_ms, created_at) VALUES
+(1, 'claim-review-workflow', 'exec-001', 'OCR Processing', 'n8n-node', 'COMPLETED', '{"claim_id": 1, "documents": 4}'::jsonb, '{"confidence": 0.92, "success": true}'::jsonb, 8500, '2024-12-15 09:35:20'),
+(1, 'claim-review-workflow', 'exec-001', 'AI Review', 'n8n-node', 'COMPLETED', '{"claim_id": 1}'::jsonb, '{"recommendation": "AUTO_APPROVE", "confidence": 0.88}'::jsonb, 3400, '2024-12-15 09:36:00'),
+(1, 'claim-review-workflow', 'exec-001', 'Fraud Detection', 'n8n-node', 'COMPLETED', '{"claim_id": 1}'::jsonb, '{"fraud_score": 0.10, "risk_level": "LOW"}'::jsonb, 2100, '2024-12-15 09:36:30');
+
+-- AI 모델 피드백 추가
+INSERT INTO ai_model_feedback (claim_id, model_name, task_type, is_correct, confidence_score, response_time_ms, feedback_by, created_at) VALUES
+(1, 'claude-3.5-sonnet', 'OCR', TRUE, 0.95, 2100, 'system', '2024-12-15 09:32:15'),
+(1, 'gpt-4o', 'OCR', TRUE, 0.92, 2800, 'system', '2024-12-15 09:33:22'),
+(1, 'gemini-1.5-pro', 'OCR', TRUE, 0.88, 1900, 'system', '2024-12-15 09:34:10'),
+(2, 'gpt-4o', 'OCR', TRUE, 0.96, 3000, 'system', '2024-12-16 10:15:30'),
+(2, 'claude-3.5-sonnet', 'OCR', TRUE, 0.93, 2200, 'system', '2024-12-16 10:16:45');
+
+
 -- 11. 트리거
 -- ═══════════════════════════════════════════════════════════════════════════
 
