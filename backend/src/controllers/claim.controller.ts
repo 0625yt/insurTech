@@ -243,13 +243,26 @@ export const getClaimById = async (req: Request, res: Response, next: NextFuncti
     }
 
     // ========== 담보별 적용 여부 및 산출 내역 매칭 ==========
+    const normalizeCoverage = (value: string) =>
+      value.replace(/\s+/g, '').replace(/[()]/g, '').replace(/\uC9C8\uBCD1|\uC0C1\uD574/g, '');
+
     const coveragesWithStatus = coveragesResult.rows.map((cov: any) => {
-      // 해당 담보가 적용되었는지 확인
-      const appliedItem = payoutBreakdown.find((item: any) =>
-        item.item.includes(cov.coverage_name) ||
-        item.item.includes(cov.coverage_code) ||
-        (cov.surgery_classification && item.item.includes(`${cov.surgery_classification}종`))
-      );
+      const coverageName = cov.coverage_name || '';
+      const coverageCode = cov.coverage_code || '';
+      const normalizedCoverage = normalizeCoverage(coverageName);
+
+      // ?? ??? ?????? ??
+      const appliedItem = payoutBreakdown.find((item: any) => {
+        const itemName = item?.item || '';
+        const normalizedItem = normalizeCoverage(itemName);
+
+        return (
+          (itemName && coverageName && (itemName.includes(coverageName) || coverageName.includes(itemName))) ||
+          (normalizedItem && normalizedCoverage && (normalizedItem.includes(normalizedCoverage) || normalizedCoverage.includes(normalizedItem))) ||
+          (coverageCode && itemName.includes(coverageCode)) ||
+          (cov.surgery_classification && itemName.includes(`${cov.surgery_classification}\uC885`))
+        );
+      });
 
       return {
         ...cov,
@@ -293,7 +306,46 @@ export const approveClaim = async (req: Request, res: Response, next: NextFuncti
     const whereClause = isNumeric ? 'id = $1' : 'claim_number = $1';
     const idValue = isNumeric ? parseInt(id) : id;
 
-    // 상태 업데이트
+    const claimResult = await db.query(
+      `SELECT id, total_approved_amount, ai_analysis_result FROM claims WHERE ${whereClause}`,
+      [idValue]
+    );
+
+    if (claimResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const claimId = claimResult.rows[0].id;
+    let finalApproved = approved_amount;
+
+    if (finalApproved === undefined || finalApproved === null) {
+      const currentApproved = Number(claimResult.rows[0].total_approved_amount) || 0;
+      if (currentApproved > 0) {
+        finalApproved = currentApproved;
+      } else {
+        const itemsSumResult = await db.query(
+          'SELECT COALESCE(SUM(approved_amount), 0) AS total FROM claim_items WHERE claim_id = $1',
+          [claimId]
+        );
+        const itemsSum = Number(itemsSumResult.rows[0].total) || 0;
+        if (itemsSum > 0) {
+          finalApproved = itemsSum;
+        } else {
+          try {
+            const aiResult = typeof claimResult.rows[0].ai_analysis_result === 'string'
+              ? JSON.parse(claimResult.rows[0].ai_analysis_result)
+              : claimResult.rows[0].ai_analysis_result;
+            const aiApproved = Number(aiResult?.coverage_analysis?.total_approved) || 0;
+            if (aiApproved > 0) {
+              finalApproved = aiApproved;
+            }
+          } catch (e) {
+            // ignore parse errors; fallback to 0
+          }
+        }
+      }
+    }
+
     await db.query(`
       UPDATE claims SET
         status = 'APPROVED',
@@ -304,26 +356,19 @@ export const approveClaim = async (req: Request, res: Response, next: NextFuncti
         total_approved_amount = COALESCE($4, total_approved_amount),
         updated_at = NOW()
       WHERE ${whereClause}
-    `, [idValue, reviewer_name, notes, approved_amount]);
+    `, [idValue, reviewer_name, notes, finalApproved ?? null]);
 
-    // 심사 이력 추가
-    const claimResult = await db.query(`SELECT id FROM claims WHERE ${whereClause}`, [idValue]);
-    if (claimResult.rows.length > 0) {
-      await db.query(`
-        INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_name, action, previous_status, new_status, decision, decision_reason)
-        VALUES ($1, 'HUMAN', $2, 'APPROVED', 'PENDING_REVIEW', 'APPROVED', 'APPROVE', $3)
-      `, [claimResult.rows[0].id, reviewer_name, notes]);
-    }
+    // ?? ?? ??
+    await db.query(`
+      INSERT INTO claim_reviews (claim_id, reviewer_type, reviewer_name, action, previous_status, new_status, decision, decision_reason)
+      VALUES ($1, 'HUMAN', $2, 'APPROVED', 'PENDING_REVIEW', 'APPROVED', 'APPROVE', $3)
+    `, [claimId, reviewer_name, notes]);
 
-    res.json({ success: true, message: '청구가 승인되었습니다.' });
+    res.json({ success: true, message: '??? ???????.' });
   } catch (error) {
     next(error);
   }
 };
-
-/**
- * 청구 거절
- */
 export const rejectClaim = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
@@ -373,7 +418,7 @@ export const getDashboardStats = async (req: Request, res: Response, next: NextF
         COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) as approved_count,
         COUNT(CASE WHEN status = 'REJECTED' THEN 1 END) as rejected_count,
         COUNT(CASE WHEN status IN ('RECEIVED', 'AI_PROCESSING', 'PENDING_REVIEW') THEN 1 END) as pending_count,
-        COALESCE(SUM(total_approved_amount), 0) as total_approved_amount,
+        COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN COALESCE(NULLIF(total_approved_amount, 0), (ai_analysis_result->'coverage_analysis'->>'total_approved')::numeric, 0) ELSE 0 END), 0) as total_approved_amount,
         COALESCE(SUM(CASE WHEN auto_processable = true THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0) * 100, 0) as auto_process_rate
       FROM claims
       WHERE DATE(created_at) = $1
@@ -384,7 +429,7 @@ export const getDashboardStats = async (req: Request, res: Response, next: NextF
       SELECT
         COUNT(*) as total_claims,
         COALESCE(SUM(total_claimed_amount), 0) as total_claimed,
-        COALESCE(SUM(total_approved_amount), 0) as total_approved,
+        COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN COALESCE(NULLIF(total_approved_amount, 0), (ai_analysis_result->'coverage_analysis'->>'total_approved')::numeric, 0) ELSE 0 END), 0) as total_approved,
         COALESCE(AVG(ai_confidence_score), 0) as avg_confidence,
         COALESCE(AVG(fraud_score), 0) as avg_fraud_score
       FROM claims
@@ -402,7 +447,7 @@ export const getDashboardStats = async (req: Request, res: Response, next: NextF
       SELECT
         DATE(created_at) as claim_date,
         COUNT(*) as count,
-        SUM(total_approved_amount) as approved_amount
+        SUM(CASE WHEN status = 'APPROVED' THEN COALESCE(NULLIF(total_approved_amount, 0), (ai_analysis_result->'coverage_analysis'->>'total_approved')::numeric, 0) ELSE 0 END) as approved_amount
       FROM claims
       WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
       GROUP BY DATE(created_at)

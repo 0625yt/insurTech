@@ -623,7 +623,7 @@
 
         async function loadStats() {
             try {
-                const res = await fetch(`${API_BASE}/claims/stats`);
+                const res = await fetch(`${API_BASE}/claims/stats?t=${Date.now()}`, { cache: 'no-store' });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 if (data.success) {
@@ -631,7 +631,7 @@
                     document.getElementById('statTodayClaims').textContent = today.total_claims || '0';
                     document.getElementById('statPending').textContent = data.data.statusDistribution?.find(s => s.status === 'PENDING_REVIEW')?.count || '0';
                     document.getElementById('statAutoRate').textContent = Math.round(today.auto_process_rate || 0) + '%';
-                    document.getElementById('statApprovedAmount').textContent = '₩' + Number(today.total_approved || 0).toLocaleString();
+                    document.getElementById('statApprovedAmount').textContent = '₩' + Number(today.total_approved_amount || 0).toLocaleString();
                     document.getElementById('statFraudScore').textContent = Number(total.avg_fraud_score || 0).toFixed(1) + '점';
                     document.getElementById('pendingBadge').textContent = data.data.statusDistribution?.find(s => s.status === 'PENDING_REVIEW')?.count || 0;
                 }

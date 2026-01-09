@@ -18,6 +18,7 @@ services:
       - ./database/migration_v2_enterprise.sql:/docker-entrypoint-initdb.d/03-migration_v2_enterprise.sql
       - ./database/migration_policy_terms.sql:/docker-entrypoint-initdb.d/04-migration_policy_terms.sql
       - ./database/migration_ai_models.sql:/docker-entrypoint-initdb.d/05-migration_ai_models.sql
+      - ./database/seed_detail_backfill.sql:/docker-entrypoint-initdb.d/06-seed_detail_backfill.sql
     networks:
       - insurtech-network
     healthcheck:
